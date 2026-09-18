@@ -12,7 +12,12 @@ const errorHandler = require('./middleware/errorMiddleware');
 const app = express();
 
 // 1. Core Middlewares
-app.use(cors());
+// Gantilah baris app.use(cors()); dengan ini:
+app.use(cors({
+  origin: '*', // Memungkinkan request dari domain manapun (termasuk Vercel)
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 
 // 2. Health Check / Root Route (HARUS DI ATAS 404 HANDLER)
