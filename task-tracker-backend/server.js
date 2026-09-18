@@ -1,5 +1,4 @@
 const express = require('express');
-const cors = require('cors');
 require('dotenv').config();
 require('./db');
 
@@ -11,17 +10,23 @@ const errorHandler = require('./middleware/errorMiddleware');
 
 const app = express();
 
-// 1. Core Middlewares
-// Konfigurasi CORS global untuk izinkan semua origin dan method
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+// 1. Force Headers CORS Manual di Paling Atas (Bypass Semua Middleware)
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  
+  // Jika browser kirim Preflight (OPTIONS), langsung jawab HTTP 200 OK
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  
+  next();
+});
 
 app.use(express.json());
 
-// 2. Health Check / Root Route
+// 2. Health Check Route
 app.get('/', (req, res) => {
   res.status(200).json({
     success: true,
@@ -34,7 +39,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/projects', authenticateToken, projectRoutes);
 app.use('/api/tasks', authenticateToken, taskRoutes);
 
-// 4. Handling Route Not Found (404)
+// 4. Handling 404
 app.use((req, res, next) => {
   const error = new Error(`Endpoint ${req.originalUrl} tidak ditemukan`);
   res.status(404);
