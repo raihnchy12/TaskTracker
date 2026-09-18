@@ -11,15 +11,10 @@ const errorHandler = require('./middleware/errorMiddleware');
 
 const app = express();
 
-// 1. Core Middlewares (CORS ditaruh paling atas)
-const corsOptions = {
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-};
-
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions)); // Handle preflight requests secara eksplisit
+// 1. Core Middlewares
+// Menangani semua origin dan request preflight (OPTIONS) secara otomatis
+app.use(cors());
+app.options('*', cors());
 
 app.use(express.json());
 
