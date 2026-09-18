@@ -2,6 +2,16 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 
+// Helper untuk sanitasi tanggal sebelum masuk ke query PostgreSQL
+const parseValidDate = (dateString) => {
+  if (!dateString || dateString.trim() === '') return null;
+  const parsedDate = new Date(dateString);
+  if (isNaN(parsedDate.getTime()) || parsedDate.getFullYear() > 9999) {
+    return null;
+  }
+  return dateString;
+};
+
 // 1. GET /api/tasks/project/:projectId - Ambil semua tugas berdasarkan Project ID
 router.get('/project/:projectId', async (req, res, next) => {
   const { projectId } = req.params;
@@ -33,7 +43,7 @@ router.post('/', async (req, res, next) => {
   const { project_id, title, description, status, priority, due_date } = req.body;
   const userId = req.user.id;
 
-  if (!project_id || !title) {
+  if (!project_id || !title || !title.trim()) {
     res.status(400);
     return next(new Error('project_id dan title wajib diisi'));
   }
@@ -49,6 +59,8 @@ router.post('/', async (req, res, next) => {
       return next(new Error('Proyek tidak ditemukan atau kamu tidak memiliki akses ke proyek ini'));
     }
 
+    const cleanDueDate = parseValidDate(due_date);
+
     const queryText = `
       INSERT INTO tasks (project_id, title, description, status, priority, due_date)
       VALUES ($1, $2, $3, $4, $5, $6)
@@ -60,7 +72,7 @@ router.post('/', async (req, res, next) => {
       description && description.trim() !== '' ? description.trim() : null, 
       status || 'TODO', 
       priority || 'MEDIUM', 
-      due_date && due_date !== '' ? due_date : null
+      cleanDueDate
     ];
 
     const result = await db.query(queryText, values);
@@ -77,9 +89,14 @@ router.post('/', async (req, res, next) => {
 
 // 3. PUT /api/tasks/:id - Edit Detail Lengkap Tugas (Title, Description, Status, Priority, Due Date)
 router.put('/:id', async (req, res, next) => {
-  const taskId = req.params.id;
+  const taskId = parseInt(req.params.id, 10);
   const userId = req.user.id;
   const { title, description, status, priority, due_date } = req.body;
+
+  if (isNaN(taskId)) {
+    res.status(400);
+    return next(new Error('ID tugas tidak valid'));
+  }
 
   if (!title || !title.trim()) {
     res.status(400);
@@ -87,7 +104,6 @@ router.put('/:id', async (req, res, next) => {
   }
 
   try {
-    // Ambil data task lama terlebih dahulu untuk mengecek hak akses dan mempertahankan status jika tidak dikirim
     const existingTask = await db.query(
       `SELECT status FROM tasks 
        WHERE id = $1 AND project_id IN (SELECT id FROM projects WHERE owner_id = $2)`,
@@ -100,6 +116,7 @@ router.put('/:id', async (req, res, next) => {
     }
 
     const currentStatus = existingTask.rows[0].status;
+    const cleanDueDate = parseValidDate(due_date);
 
     const queryText = `
       UPDATE tasks 
@@ -118,7 +135,7 @@ router.put('/:id', async (req, res, next) => {
       description && description.trim() !== '' ? description.trim() : null, 
       status || currentStatus, 
       priority || 'MEDIUM', 
-      due_date && due_date !== '' ? due_date : null, 
+      cleanDueDate, 
       taskId, 
       userId
     ];
@@ -135,11 +152,16 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
-// 4. PATCH /api/tasks/:id/status - Update Status Tugas Saja (Quick Status Switch)
+// 4. PATCH /api/tasks/:id/status - Update Status Tugas Saja
 router.patch('/:id/status', async (req, res, next) => {
-  const taskId = req.params.id;
+  const taskId = parseInt(req.params.id, 10);
   const { status } = req.body;
   const userId = req.user.id;
+
+  if (isNaN(taskId)) {
+    res.status(400);
+    return next(new Error('ID tugas tidak valid'));
+  }
 
   const validStatuses = ['TODO', 'IN_PROGRESS', 'DONE'];
   if (!status || !validStatuses.includes(status)) {
@@ -174,8 +196,13 @@ router.patch('/:id/status', async (req, res, next) => {
 
 // 5. DELETE /api/tasks/:id - Hapus Tugas
 router.delete('/:id', async (req, res, next) => {
-  const taskId = req.params.id;
+  const taskId = parseInt(req.params.id, 10);
   const userId = req.user.id;
+
+  if (isNaN(taskId)) {
+    res.status(400);
+    return next(new Error('ID tugas tidak valid'));
+  }
 
   try {
     const result = await db.query(
