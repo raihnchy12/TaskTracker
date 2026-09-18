@@ -11,16 +11,19 @@ const errorHandler = require('./middleware/errorMiddleware');
 
 const app = express();
 
-// 1. Core Middlewares
-// Gantilah baris app.use(cors()); dengan ini:
-app.use(cors({
-  origin: '*', // Memungkinkan request dari domain manapun (termasuk Vercel)
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+// 1. Core Middlewares (CORS ditaruh paling atas)
+const corsOptions = {
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // Handle preflight requests secara eksplisit
+
 app.use(express.json());
 
-// 2. Health Check / Root Route (HARUS DI ATAS 404 HANDLER)
+// 2. Health Check / Root Route
 app.get('/', (req, res) => {
   res.status(200).json({
     success: true,
@@ -40,11 +43,11 @@ app.use((req, res, next) => {
   next(error);
 });
 
-// 5. Global Error Handler (HARUS PALING BAWAH)
+// 5. Global Error Handler
 app.use(errorHandler);
 
 // 6. Start Server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Server berjalan di http://localhost:${PORT}`);
+  console.log(`Server berjalan di port ${PORT}`);
 });
