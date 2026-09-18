@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+ import { useState, type FormEvent } from 'react';
 import { fetchApi } from '../api/client';
 import type { Project, Task, ApiResponse } from '../types';
 
@@ -53,7 +53,7 @@ export default function ProjectCard({ project, onEdit, onDelete }: ProjectCardPr
     setTasksError('');
     try {
       const res = await fetchApi<ApiResponse<Task[]>>(`/tasks/project/${project.id}`);
-      setTasks(res.data);
+      setTasks(res.data || []);
       setTasksLoaded(true);
     } catch (err: any) {
       setTasksError(err.message || 'Gagal memuat tugas');
@@ -118,7 +118,9 @@ export default function ProjectCard({ project, onEdit, onDelete }: ProjectCardPr
         }),
       });
 
-      setTasks((prev) => [...prev, res.data]);
+      if (res.data) {
+        setTasks((prev) => [...prev, res.data]);
+      }
       setNewTaskTitle('');
       setNewTaskDescription('');
       setNewTaskPriority('MEDIUM');
@@ -131,15 +133,25 @@ export default function ProjectCard({ project, onEdit, onDelete }: ProjectCardPr
     }
   };
 
-  // Handler Buka Form Edit Task
+  // Handler Buka Form Edit Task (Dengan validasi sanitasi tanggal)
   const handleOpenEditTask = (task: Task) => {
     setEditingTask(task);
     setEditTaskTitle(task.title);
     setEditTaskDescription(task.description || '');
     setEditTaskPriority(task.priority);
-    setEditTaskDueDate(
-      task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : ''
-    );
+
+    // Mencegah error 'RangeError: Invalid time value' saat format tanggal di DB korup / anomali
+    if (task.due_date) {
+      const parsedDate = new Date(task.due_date);
+      if (!isNaN(parsedDate.getTime()) && parsedDate.getFullYear() < 9999) {
+        setEditTaskDueDate(parsedDate.toISOString().split('T')[0]);
+      } else {
+        setEditTaskDueDate('');
+      }
+    } else {
+      setEditTaskDueDate('');
+    }
+
     setUpdateTaskError('');
   };
 
@@ -161,14 +173,17 @@ export default function ProjectCard({ project, onEdit, onDelete }: ProjectCardPr
         body: JSON.stringify({
           title: editTaskTitle.trim(),
           description: editTaskDescription.trim() || null,
+          status: editingTask.status,
           priority: editTaskPriority,
           due_date: editTaskDueDate || null,
         }),
       });
 
-      setTasks((prev) =>
-        prev.map((t) => (t.id === editingTask.id ? res.data : t))
-      );
+      if (res.data) {
+        setTasks((prev) =>
+          prev.map((t) => (t.id === editingTask.id ? res.data : t))
+        );
+      }
       setEditingTask(null);
     } catch (err: any) {
       setUpdateTaskError(err.message || 'Gagal memperbarui tugas');
@@ -189,6 +204,20 @@ export default function ProjectCard({ project, onEdit, onDelete }: ProjectCardPr
     } catch (err: any) {
       alert(err.message || 'Gagal menghapus tugas');
     }
+  };
+
+  // Utility aman untuk merender tanggal di UI
+  const formatSafeDate = (rawDate: string | null | undefined) => {
+    if (!rawDate) return null;
+    const dateObj = new Date(rawDate);
+    if (isNaN(dateObj.getTime()) || dateObj.getFullYear() > 9999) {
+      return 'Format tanggal tidak valid';
+    }
+    return dateObj.toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
   };
 
   return (
@@ -266,7 +295,7 @@ export default function ProjectCard({ project, onEdit, onDelete }: ProjectCardPr
                             <button
                               type="button"
                               onClick={() => handleUpdateTaskStatus(task.id, task.status)}
-                              className={`badge badge-status-${task.status.toLowerCase()}`}
+                              className={`badge badge-status-${task.status ? task.status.toLowerCase() : 'todo'}`}
                               disabled={isDone}
                               style={{
                                 border: 'none',
@@ -275,11 +304,11 @@ export default function ProjectCard({ project, onEdit, onDelete }: ProjectCardPr
                               }}
                               title={isDone ? 'Tugas telah selesai' : 'Klik untuk mengoper status tugas'}
                             >
-                              {STATUS_LABEL[task.status]}
+                              {STATUS_LABEL[task.status] || task.status}
                             </button>
 
-                            <span className={`badge badge-priority-${task.priority.toLowerCase()}`}>
-                              {PRIORITY_LABEL[task.priority]}
+                            <span className={`badge badge-priority-${task.priority ? task.priority.toLowerCase() : 'medium'}`}>
+                              {PRIORITY_LABEL[task.priority] || task.priority}
                             </span>
 
                             <button
@@ -321,13 +350,13 @@ export default function ProjectCard({ project, onEdit, onDelete }: ProjectCardPr
                             </p>
                             {task.due_date && (
                               <p style={{ margin: 0, color: '#666', fontSize: '0.85rem' }}>
-                                📅 <strong>Tenggat:</strong> {new Date(task.due_date).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                📅 <strong>Tenggat:</strong> {formatSafeDate(task.due_date)}
                               </p>
                             )}
                           </div>
                         )}
 
-                        {/* Form Edit Task (Tampil saat tombol edit task diklik) */}
+                        {/* Form Edit Task */}
                         {editingTask?.id === task.id && (
                           <form className="new-task-form" onSubmit={handleUpdateTask} style={{ marginTop: '12px' }}>
                             <div className="form-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

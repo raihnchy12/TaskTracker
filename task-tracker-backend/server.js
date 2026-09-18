@@ -10,13 +10,12 @@ const errorHandler = require('./middleware/errorMiddleware');
 
 const app = express();
 
-// 1. Force Headers CORS Manual di Paling Atas (Bypass Semua Middleware)
+// 1. Force Headers CORS Manual (Bypass Semua Middleware)
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
   
-  // Jika browser kirim Preflight (OPTIONS), langsung jawab HTTP 200 OK
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
