@@ -1,6 +1,11 @@
 // src/api/client.ts
 
-const API_URL = 'http://localhost:3000/api';
+// Ambil URL dasar dari env Vercel/Vite, hapus trailing slash jika ada
+const BASE_URL = import.meta.env.VITE_API_URL 
+  ? import.meta.env.VITE_API_URL.replace(/\/$/, '') 
+  : 'http://localhost:3000';
+
+const API_URL = `${BASE_URL}/api`;
 
 export async function fetchApi<T>(
   endpoint: string,
@@ -14,7 +19,10 @@ export async function fetchApi<T>(
     ...options.headers,
   };
 
-  const response = await fetch(`${API_URL}${endpoint}`, {
+  // Pastikan endpoint selalu diawali tanda /
+  const formattedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+
+  const response = await fetch(`${API_URL}${formattedEndpoint}`, {
     ...options,
     headers,
   });
