@@ -56,11 +56,11 @@ router.post('/', async (req, res, next) => {
     `;
     const values = [
       project_id, 
-      title, 
-      description || null, 
+      title.trim(), 
+      description && description.trim() !== '' ? description.trim() : null, 
       status || 'TODO', 
       priority || 'MEDIUM', 
-      due_date || null
+      due_date && due_date !== '' ? due_date : null
     ];
 
     const result = await db.query(queryText, values);
@@ -81,33 +81,49 @@ router.put('/:id', async (req, res, next) => {
   const userId = req.user.id;
   const { title, description, status, priority, due_date } = req.body;
 
-  if (!title) {
+  if (!title || !title.trim()) {
     res.status(400);
     return next(new Error('Title tugas wajib diisi'));
   }
 
   try {
-    const result = await db.query(
-      `UPDATE tasks 
-       SET title = $1, description = $2, status = $3, priority = $4, due_date = $5 
-       WHERE id = $6 
-       AND project_id IN (SELECT id FROM projects WHERE owner_id = $7)
-       RETURNING *`,
-      [
-        title, 
-        description || null, 
-        status || 'TODO', 
-        priority || 'MEDIUM', 
-        due_date || null, 
-        taskId, 
-        userId
-      ]
+    // Ambil data task lama terlebih dahulu untuk mengecek hak akses dan mempertahankan status jika tidak dikirim
+    const existingTask = await db.query(
+      `SELECT status FROM tasks 
+       WHERE id = $1 AND project_id IN (SELECT id FROM projects WHERE owner_id = $2)`,
+      [taskId, userId]
     );
 
-    if (result.rows.length === 0) {
+    if (existingTask.rows.length === 0) {
       res.status(404);
       return next(new Error('Tugas tidak ditemukan atau kamu tidak memiliki akses untuk mengubahnya'));
     }
+
+    const currentStatus = existingTask.rows[0].status;
+
+    const queryText = `
+      UPDATE tasks 
+      SET title = $1, 
+          description = $2, 
+          status = $3, 
+          priority = $4, 
+          due_date = $5 
+      WHERE id = $6 
+      AND project_id IN (SELECT id FROM projects WHERE owner_id = $7)
+      RETURNING *
+    `;
+
+    const values = [
+      title.trim(), 
+      description && description.trim() !== '' ? description.trim() : null, 
+      status || currentStatus, 
+      priority || 'MEDIUM', 
+      due_date && due_date !== '' ? due_date : null, 
+      taskId, 
+      userId
+    ];
+
+    const result = await db.query(queryText, values);
 
     res.json({
       success: true,
