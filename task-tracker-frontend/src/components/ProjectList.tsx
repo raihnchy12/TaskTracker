@@ -9,11 +9,19 @@ export default function ProjectList() {
   const [error, setError] = useState<string>('');
   const [search, setSearch] = useState('');
 
+  // State Form Tambah Proyek
   const [showNewForm, setShowNewForm] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newDescription, setNewDescription] = useState('');
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState('');
+
+  // State Form Edit Proyek
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [updating, setUpdating] = useState(false);
+  const [updateError, setUpdateError] = useState('');
 
   useEffect(() => {
     const loadProjects = async () => {
@@ -40,6 +48,7 @@ export default function ProjectList() {
     );
   }, [projects, search]);
 
+  // Handler Tambah Proyek
   const handleCreateProject = async (e: FormEvent) => {
     e.preventDefault();
     setCreateError('');
@@ -70,6 +79,48 @@ export default function ProjectList() {
     }
   };
 
+  // Handler Buka Form Edit
+  const handleOpenEditModal = (project: Project) => {
+    setEditingProject(project);
+    setEditTitle(project.title);
+    setEditDescription(project.description || '');
+    setUpdateError('');
+  };
+
+  // Handler Simpan Edit Proyek
+  const handleUpdateProject = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!editingProject) return;
+    setUpdateError('');
+
+    if (!editTitle.trim()) {
+      setUpdateError('Nama proyek wajib diisi');
+      return;
+    }
+
+    setUpdating(true);
+    try {
+      const res = await fetchApi<ApiResponse<Project>>(`/projects/${editingProject.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          title: editTitle.trim(),
+          description: editDescription.trim() || null,
+        }),
+      });
+
+      // Update state local proyek yang diedit
+      setProjects((prev) =>
+        prev.map((p) => (p.id === editingProject.id ? res.data : p))
+      );
+      setEditingProject(null);
+    } catch (err: any) {
+      setUpdateError(err.message || 'Gagal memperbarui proyek');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  // Handler Hapus Proyek
   const handleDeleteProject = async (projectId: number) => {
     const confirmed = window.confirm('Hapus proyek ini beserta seluruh tugasnya?');
     if (!confirmed) return;
@@ -159,6 +210,56 @@ export default function ProjectList() {
         </form>
       )}
 
+      {/* Form Modal / Card Edit Proyek */}
+      {editingProject && (
+        <form className="new-project-form edit-project-form" onSubmit={handleUpdateProject}>
+          <div className="form-header">
+            <h3>Edit Proyek</h3>
+            <button
+              type="button"
+              className="btn-close"
+              onClick={() => setEditingProject(null)}
+            >
+              <span className="material-symbols-outlined">close</span>
+            </button>
+          </div>
+
+          {updateError && <div className="error-message">{updateError}</div>}
+
+          <div className="form-group">
+            <label>Nama Proyek *</label>
+            <input
+              type="text"
+              value={editTitle}
+              onChange={(e) => setEditTitle(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Deskripsi (opsional)</label>
+            <textarea
+              rows={2}
+              value={editDescription}
+              onChange={(e) => setEditDescription(e.target.value)}
+            />
+          </div>
+
+          <div className="form-actions" style={{ display: 'flex', gap: '8px' }}>
+            <button type="submit" className="btn-gradient" disabled={updating}>
+              <span>{updating ? 'Memperbarui...' : 'Simpan Perubahan'}</span>
+            </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setEditingProject(null)}
+            >
+              Batal
+            </button>
+          </div>
+        </form>
+      )}
+
       {filteredProjects.length === 0 ? (
         <div className="empty-state">
           <p>
@@ -173,6 +274,7 @@ export default function ProjectList() {
             <ProjectCard
               key={proj.id}
               project={proj}
+              onEdit={() => handleOpenEditModal(proj)}
               onDelete={() => handleDeleteProject(proj.id)}
             />
           ))}
