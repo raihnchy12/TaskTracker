@@ -11,11 +11,17 @@ const errorHandler = require('./middleware/errorMiddleware');
 
 const app = express();
 
-// Handle CORS untuk semua origin
-app.use(cors());
+// 1. Core Middlewares
+// Konfigurasi CORS global untuk izinkan semua origin dan method
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
 app.use(express.json());
 
+// 2. Health Check / Root Route
 app.get('/', (req, res) => {
   res.status(200).json({
     success: true,
@@ -23,18 +29,22 @@ app.get('/', (req, res) => {
   });
 });
 
+// 3. API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/projects', authenticateToken, projectRoutes);
 app.use('/api/tasks', authenticateToken, taskRoutes);
 
+// 4. Handling Route Not Found (404)
 app.use((req, res, next) => {
   const error = new Error(`Endpoint ${req.originalUrl} tidak ditemukan`);
   res.status(404);
   next(error);
 });
 
+// 5. Global Error Handler
 app.use(errorHandler);
 
+// 6. Start Server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server berjalan di port ${PORT}`);
