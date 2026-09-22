@@ -1,17 +1,28 @@
- import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { fetchApi } from '../api/client';
 import type { Project, Task, ApiResponse } from '../types';
+import StatusTabs, { type TaskStatus } from './StatusTabs';
+import ConfirmModal from './ConfirmModal';
 
 interface ProjectCardProps {
   project: Project;
   onEdit: () => void;
   onDelete: () => void;
+  onRequestMove?: (
+    taskId: string,
+    taskTitle: string,
+    fromStatus: string,
+    toStatus: string,
+    onConfirm: () => void
+  ) => void;
 }
 
 const STATUS_LABEL: Record<Task['status'], string> = {
-  TODO: 'Belum Dikerjakan',
-  IN_PROGRESS: 'Dikerjakan',
-  DONE: 'Selesai',
+  BACKLOG: 'Backlog',
+  TODO: 'To Do',
+  IN_PROGRESS: 'IN PROGRESS',
+  REVIEW: 'Review',
+  DONE: 'DONE',
 };
 
 const PRIORITY_LABEL: Record<Task['priority'], string> = {
@@ -20,17 +31,18 @@ const PRIORITY_LABEL: Record<Task['priority'], string> = {
   HIGH: 'Tinggi',
 };
 
-export default function ProjectCard({ project, onEdit, onDelete }: ProjectCardProps) {
+const STATUS_ORDER: Task['status'][] = ['BACKLOG', 'TODO', 'IN_PROGRESS', 'REVIEW', 'DONE'];
+
+export default function ProjectCard({ project, onEdit, onDelete, onRequestMove }: ProjectCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [tasksLoaded, setTasksLoaded] = useState(false);
   const [loadingTasks, setLoadingTasks] = useState(false);
   const [tasksError, setTasksError] = useState('');
 
-  // State toggle deskripsi task
+  const [activeStatus, setActiveStatus] = useState<TaskStatus>('BACKLOG');
   const [expandedTaskId, setExpandedTaskId] = useState<number | null>(null);
 
-  // State Form Tambah Task
   const [showNewTaskForm, setShowNewTaskForm] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskDescription, setNewTaskDescription] = useState('');
@@ -39,7 +51,6 @@ export default function ProjectCard({ project, onEdit, onDelete }: ProjectCardPr
   const [creatingTask, setCreatingTask] = useState(false);
   const [createTaskError, setCreateTaskError] = useState('');
 
-  // State Form Edit Task
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [editTaskTitle, setEditTaskTitle] = useState('');
   const [editTaskDescription, setEditTaskDescription] = useState('');
@@ -47,6 +58,10 @@ export default function ProjectCard({ project, onEdit, onDelete }: ProjectCardPr
   const [editTaskDueDate, setEditTaskDueDate] = useState('');
   const [updatingTask, setUpdatingTask] = useState(false);
   const [updateTaskError, setUpdateTaskError] = useState('');
+
+  // State Pop-up Modal Hapus
+  const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
+  const [showDeleteProjectModal, setShowDeleteProjectModal] = useState(false);
 
   const loadTasks = async () => {
     setLoadingTasks(true);
@@ -74,25 +89,39 @@ export default function ProjectCard({ project, onEdit, onDelete }: ProjectCardPr
     setExpandedTaskId((prev) => (prev === taskId ? null : taskId));
   };
 
-  const handleUpdateTaskStatus = async (taskId: number, currentStatus: Task['status']) => {
-    if (currentStatus === 'DONE') return;
-
-    let nextStatus: Task['status'] = 'IN_PROGRESS';
-    if (currentStatus === 'IN_PROGRESS') {
-      nextStatus = 'DONE';
-    }
-
+  const executeMoveTask = async (task: Task, nextStatus: Task['status']) => {
     try {
-      const res = await fetchApi<ApiResponse<Task>>(`/tasks/${taskId}/status`, {
+      const res = await fetchApi<ApiResponse<Task>>(`/tasks/${task.id}/status`, {
         method: 'PATCH',
         body: JSON.stringify({ status: nextStatus }),
       });
 
       setTasks((prev) =>
-        prev.map((t) => (t.id === taskId ? { ...t, status: res.data?.status || nextStatus } : t))
+        prev.map((t) => (t.id === task.id ? { ...t, status: res.data?.status || nextStatus } : t))
       );
+      setActiveStatus(nextStatus);
     } catch (err: any) {
-      alert(err.message || 'Gagal mengupdate status tugas');
+      alert(err.message || 'Gagal memindahkan status tugas');
+    }
+  };
+
+  const handleMoveTask = (task: Task, direction: 'prev' | 'next') => {
+    const currentIndex = STATUS_ORDER.indexOf(task.status);
+    const nextIndex = direction === 'next' ? currentIndex + 1 : currentIndex - 1;
+
+    if (nextIndex < 0 || nextIndex >= STATUS_ORDER.length) return;
+    const nextStatus = STATUS_ORDER[nextIndex];
+
+    if (onRequestMove) {
+      onRequestMove(
+        String(task.id),
+        task.title,
+        STATUS_LABEL[task.status],
+        STATUS_LABEL[nextStatus],
+        () => executeMoveTask(task, nextStatus)
+      );
+    } else {
+      executeMoveTask(task, nextStatus);
     }
   };
 
@@ -126,6 +155,7 @@ export default function ProjectCard({ project, onEdit, onDelete }: ProjectCardPr
       setNewTaskPriority('MEDIUM');
       setNewTaskDueDate('');
       setShowNewTaskForm(false);
+      setActiveStatus('BACKLOG');
     } catch (err: any) {
       setCreateTaskError(err.message || 'Gagal menambahkan tugas');
     } finally {
@@ -133,14 +163,12 @@ export default function ProjectCard({ project, onEdit, onDelete }: ProjectCardPr
     }
   };
 
-  // Handler Buka Form Edit Task (Dengan validasi sanitasi tanggal)
   const handleOpenEditTask = (task: Task) => {
     setEditingTask(task);
     setEditTaskTitle(task.title);
     setEditTaskDescription(task.description || '');
     setEditTaskPriority(task.priority);
 
-    // Mencegah error 'RangeError: Invalid time value' saat format tanggal di DB korup / anomali
     if (task.due_date) {
       const parsedDate = new Date(task.due_date);
       if (!isNaN(parsedDate.getTime()) && parsedDate.getFullYear() < 9999) {
@@ -155,7 +183,6 @@ export default function ProjectCard({ project, onEdit, onDelete }: ProjectCardPr
     setUpdateTaskError('');
   };
 
-  // Handler Simpan Edit Task
   const handleUpdateTask = async (e: FormEvent) => {
     e.preventDefault();
     if (!editingTask) return;
@@ -180,9 +207,7 @@ export default function ProjectCard({ project, onEdit, onDelete }: ProjectCardPr
       });
 
       if (res.data) {
-        setTasks((prev) =>
-          prev.map((t) => (t.id === editingTask.id ? res.data : t))
-        );
+        setTasks((prev) => prev.map((t) => (t.id === editingTask.id ? res.data : t)));
       }
       setEditingTask(null);
     } catch (err: any) {
@@ -192,21 +217,26 @@ export default function ProjectCard({ project, onEdit, onDelete }: ProjectCardPr
     }
   };
 
-  const handleDeleteTask = async (taskId: number) => {
-    const confirmed = window.confirm('Hapus tugas ini?');
-    if (!confirmed) return;
+  const handleConfirmDeleteTask = async () => {
+    if (!taskToDelete) return;
 
     try {
-      await fetchApi<ApiResponse<null>>(`/tasks/${taskId}`, {
+      await fetchApi<ApiResponse<null>>(`/tasks/${taskToDelete.id}`, {
         method: 'DELETE',
       });
-      setTasks((prev) => prev.filter((t) => t.id !== taskId));
+      setTasks((prev) => prev.filter((t) => t.id !== taskToDelete.id));
     } catch (err: any) {
       alert(err.message || 'Gagal menghapus tugas');
+    } finally {
+      setTaskToDelete(null);
     }
   };
 
-  // Utility aman untuk merender tanggal di UI
+  const handleConfirmDeleteProject = () => {
+    setShowDeleteProjectModal(false);
+    onDelete();
+  };
+
   const formatSafeDate = (rawDate: string | null | undefined) => {
     if (!rawDate) return null;
     const dateObj = new Date(rawDate);
@@ -220,298 +250,314 @@ export default function ProjectCard({ project, onEdit, onDelete }: ProjectCardPr
     });
   };
 
+  const visibleTasks = tasks.filter((t) => t.status === activeStatus);
+
   return (
-    <li className="project-card">
-      <div className="project-card-header">
-        <div>
-          <h3>{project.title}</h3>
-          {project.description && <p>{project.description}</p>}
+    <>
+      <li className="project-card">
+        <div className="project-card-header">
+          <div>
+            <h3>{project.title}</h3>
+            {project.description && <p>{project.description}</p>}
+          </div>
+          <div style={{ display: 'flex', gap: '4px' }}>
+            <button
+              type="button"
+              className="icon-btn"
+              onClick={onEdit}
+              aria-label={`Edit proyek ${project.title}`}
+              title="Edit proyek"
+            >
+              <span className="material-symbols-outlined">edit</span>
+            </button>
+            <button
+              type="button"
+              className="icon-btn danger"
+              onClick={() => setShowDeleteProjectModal(true)}
+              aria-label={`Hapus proyek ${project.title}`}
+              title="Hapus proyek"
+            >
+              <span className="material-symbols-outlined">delete</span>
+            </button>
+          </div>
         </div>
-        <div style={{ display: 'flex', gap: '4px' }}>
-          <button
-            type="button"
-            className="icon-btn"
-            onClick={onEdit}
-            aria-label={`Edit proyek ${project.title}`}
-            title="Edit proyek"
-          >
-            <span className="material-symbols-outlined">edit</span>
-          </button>
-          <button
-            type="button"
-            className="icon-btn danger"
-            onClick={onDelete}
-            aria-label={`Hapus proyek ${project.title}`}
-            title="Hapus proyek"
-          >
-            <span className="material-symbols-outlined">delete</span>
-          </button>
-        </div>
-      </div>
 
-      <button type="button" className="link-toggle" onClick={toggleExpanded}>
-        {expanded ? 'Sembunyikan tugas' : 'Lihat tugas'}
-      </button>
+        <button type="button" className="link-toggle" onClick={toggleExpanded}>
+          {expanded ? 'Sembunyikan tugas' : 'Lihat tugas'}
+        </button>
 
-      {expanded && (
-        <div className="task-panel">
-          {loadingTasks && (
-            <div className="state-message loading-state small">
-              <span className="spinner" aria-hidden="true" />
-              <p>Memuat tugas...</p>
-            </div>
-          )}
+        {expanded && (
+          <div className="task-panel">
+            {loadingTasks && (
+              <div className="state-message loading-state small">
+                <span className="spinner" aria-hidden="true" />
+                <p>Memuat tugas...</p>
+              </div>
+            )}
 
-          {!loadingTasks && tasksError && (
-            <div className="error-message">{tasksError}</div>
-          )}
+            {!loadingTasks && tasksError && <div className="error-message">{tasksError}</div>}
 
-          {!loadingTasks && !tasksError && (
-            <>
-              {tasks.length === 0 ? (
-                <p className="text-muted task-empty">Belum ada tugas di proyek ini.</p>
-              ) : (
-                <ul className="task-list">
-                  {tasks.map((task) => {
-                    const isTaskExpanded = expandedTaskId === task.id;
-                    const isDone = task.status === 'DONE';
+            {!loadingTasks && !tasksError && (
+              <>
+                <StatusTabs tasks={tasks} active={activeStatus} onChange={setActiveStatus} />
 
-                    return (
-                      <li key={task.id} className="task-item" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
-                        <div className="task-item-main" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
-                          
-                          <div 
-                            onClick={() => toggleTaskDetail(task.id)}
-                            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}
-                            title="Klik untuk melihat/menyembunyikan deskripsi"
-                          >
-                            <span className="material-symbols-outlined" style={{ fontSize: '18px', color: '#666' }}>
-                              {isTaskExpanded ? 'expand_less' : 'expand_more'}
+                {visibleTasks.length === 0 ? (
+                  <p className="text-muted task-empty">
+                    Tidak ada tugas berstatus "{STATUS_LABEL[activeStatus]}".
+                  </p>
+                ) : (
+                  <ul className="task-list">
+                    {visibleTasks.map((task) => {
+                      const isTaskExpanded = expandedTaskId === task.id;
+                      const statusIndex = STATUS_ORDER.indexOf(task.status);
+                      const canMovePrev = statusIndex > 0;
+                      const canMoveNext = statusIndex < STATUS_ORDER.length - 1;
+
+                      return (
+                        <li key={task.id} className="task-item task-item-stacked">
+                          <div className="task-item-main-row">
+                            <div
+                              onClick={() => toggleTaskDetail(task.id)}
+                              className="task-title-toggle"
+                              title="Klik untuk melihat/menyembunyikan deskripsi"
+                            >
+                              <span className="material-symbols-outlined task-expand-icon">
+                                {isTaskExpanded ? 'expand_less' : 'expand_more'}
+                              </span>
+                              <span className="task-title">{task.title}</span>
+                            </div>
+
+                            <span className={`badge badge-priority-${task.priority.toLowerCase()}`}>
+                              {PRIORITY_LABEL[task.priority]}
                             </span>
-                            <span className="task-title" style={{ fontWeight: 500 }}>{task.title}</span>
                           </div>
 
-                          <div className="task-badges" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateTaskStatus(task.id, task.status)}
-                              className={`badge badge-status-${task.status ? task.status.toLowerCase() : 'todo'}`}
-                              disabled={isDone}
-                              style={{
-                                border: 'none',
-                                cursor: isDone ? 'not-allowed' : 'pointer',
-                                opacity: isDone ? 0.7 : 1,
-                              }}
-                              title={isDone ? 'Tugas telah selesai' : 'Klik untuk mengoper status tugas'}
-                            >
-                              {STATUS_LABEL[task.status] || task.status}
-                            </button>
-
-                            <span className={`badge badge-priority-${task.priority ? task.priority.toLowerCase() : 'medium'}`}>
-                              {PRIORITY_LABEL[task.priority] || task.priority}
-                            </span>
-
-                            <button
-                              type="button"
-                              className="icon-btn"
-                              onClick={() => handleOpenEditTask(task)}
-                              aria-label={`Edit tugas ${task.title}`}
-                              title="Edit tugas"
-                            >
-                              <span className="material-symbols-outlined">edit</span>
-                            </button>
-
-                            <button
-                              type="button"
-                              className="icon-btn danger"
-                              onClick={() => handleDeleteTask(task.id)}
-                              aria-label={`Hapus tugas ${task.title}`}
-                              title="Hapus tugas"
-                            >
-                              <span className="material-symbols-outlined">delete</span>
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Deskripsi Task */}
-                        {isTaskExpanded && (
-                          <div 
-                            className="task-detail-body" 
-                            style={{ 
-                              marginTop: '10px', 
-                              padding: '10px 12px', 
-                              backgroundColor: 'rgba(0, 0, 0, 0.03)', 
-                              borderRadius: '6px',
-                              fontSize: '0.9rem'
-                            }}
-                          >
-                            <p style={{ margin: '0 0 6px 0', color: '#333', whiteSpace: 'pre-line' }}>
-                              <strong>Deskripsi:</strong> {task.description || <em className="text-muted">Tidak ada deskripsi.</em>}
-                            </p>
-                            {task.due_date && (
-                              <p style={{ margin: 0, color: '#666', fontSize: '0.85rem' }}>
-                                📅 <strong>Tenggat:</strong> {formatSafeDate(task.due_date)}
+                          {isTaskExpanded && (
+                            <div className="task-detail-body">
+                              <p className="task-detail-desc">
+                                <strong>Deskripsi:</strong>{' '}
+                                {task.description || <em className="text-muted">Tidak ada deskripsi.</em>}
                               </p>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Form Edit Task */}
-                        {editingTask?.id === task.id && (
-                          <form className="new-task-form" onSubmit={handleUpdateTask} style={{ marginTop: '12px' }}>
-                            <div className="form-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <h4 style={{ margin: 0 }}>Edit Tugas</h4>
-                              <button type="button" className="btn-close" onClick={() => setEditingTask(null)}>
-                                <span className="material-symbols-outlined">close</span>
-                              </button>
+                              {task.due_date && (
+                                <p className="task-detail-due">
+                                  <span className="material-symbols-outlined task-detail-due-icon">
+                                    event
+                                  </span>
+                                  <strong>Tenggat:</strong> {formatSafeDate(task.due_date)}
+                                </p>
+                              )}
                             </div>
+                          )}
 
-                            {updateTaskError && <div className="error-message">{updateTaskError}</div>}
-
-                            <div className="form-group">
-                              <label>Nama Tugas *</label>
-                              <input
-                                type="text"
-                                value={editTaskTitle}
-                                onChange={(e) => setEditTaskTitle(e.target.value)}
-                                required
-                              />
-                            </div>
-
-                            <div className="form-group">
-                              <label>Deskripsi (opsional)</label>
-                              <textarea
-                                rows={2}
-                                value={editTaskDescription}
-                                onChange={(e) => setEditTaskDescription(e.target.value)}
-                              />
-                            </div>
-
-                            <div className="form-row">
-                              <div className="form-group">
-                                <label>Prioritas</label>
-                                <select
-                                  value={editTaskPriority}
-                                  onChange={(e) =>
-                                    setEditTaskPriority(e.target.value as Task['priority'])
-                                  }
-                                >
-                                  <option value="LOW">Rendah</option>
-                                  <option value="MEDIUM">Sedang</option>
-                                  <option value="HIGH">Tinggi</option>
-                                </select>
-                              </div>
-
-                              <div className="form-group">
-                                <label>Tenggat (opsional)</label>
-                                <input
-                                  type="date"
-                                  value={editTaskDueDate}
-                                  onChange={(e) => setEditTaskDueDate(e.target.value)}
-                                />
-                              </div>
-                            </div>
-
-                            <div className="new-task-form-actions">
-                              <button type="submit" className="btn-gradient btn-small" disabled={updatingTask}>
-                                <span>{updatingTask ? 'Memperbarui...' : 'Simpan Perubahan'}</span>
+                          <div className="task-item-footer">
+                            <div className="task-move-controls">
+                              <button
+                                type="button"
+                                className="move-btn"
+                                onClick={() => handleMoveTask(task, 'prev')}
+                                disabled={!canMovePrev}
+                                aria-label="Mundurkan status"
+                              >
+                                <span className="material-symbols-outlined">chevron_left</span>
+                                <span className="move-btn-label">Mundur</span>
                               </button>
                               <button
                                 type="button"
-                                className="btn-ghost"
-                                onClick={() => setEditingTask(null)}
+                                className="move-btn move-btn-primary"
+                                onClick={() => handleMoveTask(task, 'next')}
+                                disabled={!canMoveNext}
+                                aria-label="Majukan status"
                               >
-                                <span>Batal</span>
+                                <span className="move-btn-label">
+                                  {canMoveNext ? `Ke ${STATUS_LABEL[STATUS_ORDER[statusIndex + 1]]}` : 'Selesai'}
+                                </span>
+                                <span className="material-symbols-outlined">chevron_right</span>
                               </button>
                             </div>
-                          </form>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
 
-              {/* Form Tambah Task */}
-              {showNewTaskForm ? (
-                <form className="new-task-form" onSubmit={handleCreateTask}>
-                  {createTaskError && (
-                    <div className="error-message">{createTaskError}</div>
-                  )}
+                            <div className="task-item-actions">
+                              <button
+                                type="button"
+                                className="icon-btn"
+                                onClick={() => handleOpenEditTask(task)}
+                                aria-label={`Edit tugas ${task.title}`}
+                                title="Edit tugas"
+                              >
+                                <span className="material-symbols-outlined">edit</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="icon-btn danger"
+                                onClick={() => setTaskToDelete(task)}
+                                aria-label={`Hapus tugas ${task.title}`}
+                                title="Hapus tugas"
+                              >
+                                <span className="material-symbols-outlined">delete</span>
+                              </button>
+                            </div>
+                          </div>
 
-                  <div className="form-group">
-                    <label>Nama Tugas *</label>
-                    <input
-                      type="text"
-                      placeholder="Contoh: Desain wireframe"
-                      value={newTaskTitle}
-                      onChange={(e) => setNewTaskTitle(e.target.value)}
-                      required
-                    />
-                  </div>
+                          {editingTask?.id === task.id && (
+                            <form className="new-task-form" onSubmit={handleUpdateTask}>
+                              <div className="form-header">
+                                <h4>Edit Tugas</h4>
+                                <button type="button" className="btn-close" onClick={() => setEditingTask(null)}>
+                                  <span className="material-symbols-outlined">close</span>
+                                </button>
+                              </div>
 
-                  <div className="form-group">
-                    <label>Deskripsi (opsional)</label>
-                    <textarea
-                      rows={2}
-                      placeholder="Detail tugas ini"
-                      value={newTaskDescription}
-                      onChange={(e) => setNewTaskDescription(e.target.value)}
-                    />
-                  </div>
+                              {updateTaskError && <div className="error-message">{updateTaskError}</div>}
 
-                  <div className="form-row">
+                              <div className="form-group">
+                                <label>Nama Tugas *</label>
+                                <input
+                                  type="text"
+                                  value={editTaskTitle}
+                                  onChange={(e) => setEditTaskTitle(e.target.value)}
+                                  required
+                                />
+                              </div>
+
+                              <div className="form-group">
+                                <label>Deskripsi (opsional)</label>
+                                <textarea
+                                  rows={2}
+                                  value={editTaskDescription}
+                                  onChange={(e) => setEditTaskDescription(e.target.value)}
+                                />
+                              </div>
+
+                              <div className="form-row">
+                                <div className="form-group">
+                                  <label>Prioritas</label>
+                                  <select
+                                    value={editTaskPriority}
+                                    onChange={(e) => setEditTaskPriority(e.target.value as Task['priority'])}
+                                  >
+                                    <option value="LOW">Rendah</option>
+                                    <option value="MEDIUM">Sedang</option>
+                                    <option value="HIGH">Tinggi</option>
+                                  </select>
+                                </div>
+
+                                <div className="form-group">
+                                  <label>Tenggat (opsional)</label>
+                                  <input
+                                    type="date"
+                                    value={editTaskDueDate}
+                                    onChange={(e) => setEditTaskDueDate(e.target.value)}
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="new-task-form-actions">
+                                <button type="submit" className="btn-gradient btn-small" disabled={updatingTask}>
+                                  <span>{updatingTask ? 'Memperbarui...' : 'Simpan Perubahan'}</span>
+                                </button>
+                                <button type="button" className="btn-ghost" onClick={() => setEditingTask(null)}>
+                                  <span>Batal</span>
+                                </button>
+                              </div>
+                            </form>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+
+                {showNewTaskForm ? (
+                  <form className="new-task-form" onSubmit={handleCreateTask}>
+                    {createTaskError && <div className="error-message">{createTaskError}</div>}
+
                     <div className="form-group">
-                      <label>Prioritas</label>
-                      <select
-                        value={newTaskPriority}
-                        onChange={(e) =>
-                          setNewTaskPriority(e.target.value as Task['priority'])
-                        }
-                      >
-                        <option value="LOW">Rendah</option>
-                        <option value="MEDIUM">Sedang</option>
-                        <option value="HIGH">Tinggi</option>
-                      </select>
-                    </div>
-
-                    <div className="form-group">
-                      <label>Tenggat (opsional)</label>
+                      <label>Nama Tugas *</label>
                       <input
-                        type="date"
-                        value={newTaskDueDate}
-                        onChange={(e) => setNewTaskDueDate(e.target.value)}
+                        type="text"
+                        placeholder="Contoh: Desain wireframe"
+                        value={newTaskTitle}
+                        onChange={(e) => setNewTaskTitle(e.target.value)}
+                        required
                       />
                     </div>
-                  </div>
 
-                  <div className="new-task-form-actions">
-                    <button type="submit" className="btn-gradient btn-small" disabled={creatingTask}>
-                      <span>{creatingTask ? 'Menyimpan...' : 'Simpan Tugas'}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-ghost"
-                      onClick={() => setShowNewTaskForm(false)}
-                    >
-                      <span>Batal</span>
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                <button
-                  type="button"
-                  className="btn-ghost add-task-btn"
-                  onClick={() => setShowNewTaskForm(true)}
-                >
-                  <span className="material-symbols-outlined">add</span>
-                  <span>Tambah Tugas</span>
-                </button>
-              )}
-            </>
-          )}
-        </div>
-      )}
-    </li>
+                    <div className="form-group">
+                      <label>Deskripsi (opsional)</label>
+                      <textarea
+                        rows={2}
+                        placeholder="Detail tugas ini"
+                        value={newTaskDescription}
+                        onChange={(e) => setNewTaskDescription(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="form-row">
+                      <div className="form-group">
+                        <label>Prioritas</label>
+                        <select
+                          value={newTaskPriority}
+                          onChange={(e) => setNewTaskPriority(e.target.value as Task['priority'])}
+                        >
+                          <option value="LOW">Rendah</option>
+                          <option value="MEDIUM">Sedang</option>
+                          <option value="HIGH">Tinggi</option>
+                        </select>
+                      </div>
+
+                      <div className="form-group">
+                        <label>Tenggat (opsional)</label>
+                        <input
+                          type="date"
+                          value={newTaskDueDate}
+                          onChange={(e) => setNewTaskDueDate(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="new-task-form-actions">
+                      <button type="submit" className="btn-gradient btn-small" disabled={creatingTask}>
+                        <span>{creatingTask ? 'Menyimpan...' : 'Simpan Tugas'}</span>
+                      </button>
+                      <button type="button" className="btn-ghost" onClick={() => setShowNewTaskForm(false)}>
+                        <span>Batal</span>
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn-ghost add-task-btn"
+                    onClick={() => setShowNewTaskForm(true)}
+                  >
+                    <span className="material-symbols-outlined">add</span>
+                    <span>Tambah Tugas</span>
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </li>
+
+      {/* Pop-up Hapus Tugas */}
+      <ConfirmModal
+        isOpen={Boolean(taskToDelete)}
+        title="Hapus Tugas"
+        message={`Apakah kamu yakin ingin menghapus tugas "${taskToDelete?.title}"?`}
+        confirmLabel="Ya, Hapus"
+        onConfirm={handleConfirmDeleteTask}
+        onCancel={() => setTaskToDelete(null)}
+      />
+
+      {/* Pop-up Hapus Proyek */}
+      <ConfirmModal
+        isOpen={showDeleteProjectModal}
+        title="Hapus Proyek"
+        message={`Apakah kamu yakin ingin menghapus proyek "${project.title}" beserta seluruh tugas di dalamnya?`}
+        confirmLabel="Ya, Hapus Proyek"
+        onConfirm={handleConfirmDeleteProject}
+        onCancel={() => setShowDeleteProjectModal(false)}
+      />
+    </>
   );
 }

@@ -2,6 +2,9 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 
+// Daftar status yang valid untuk papan Kanban (Backlog -> To Do -> In Progress -> Review -> Done)
+const VALID_STATUSES = ['BACKLOG', 'TODO', 'IN_PROGRESS', 'REVIEW', 'DONE'];
+
 // Helper untuk sanitasi tanggal sebelum masuk ke query PostgreSQL
 const parseValidDate = (dateString) => {
   if (!dateString || dateString.trim() === '') return null;
@@ -48,6 +51,11 @@ router.post('/', async (req, res, next) => {
     return next(new Error('project_id dan title wajib diisi'));
   }
 
+  if (status && !VALID_STATUSES.includes(status)) {
+    res.status(400);
+    return next(new Error(`Status tidak valid. Gunakan salah satu: ${VALID_STATUSES.join(', ')}`));
+  }
+
   try {
     const projectCheck = await db.query(
       'SELECT id FROM projects WHERE id = $1 AND owner_id = $2',
@@ -70,7 +78,7 @@ router.post('/', async (req, res, next) => {
       project_id, 
       title.trim(), 
       description && description.trim() !== '' ? description.trim() : null, 
-      status || 'TODO', 
+      status || 'BACKLOG', 
       priority || 'MEDIUM', 
       cleanDueDate
     ];
@@ -101,6 +109,11 @@ router.put('/:id', async (req, res, next) => {
   if (!title || !title.trim()) {
     res.status(400);
     return next(new Error('Title tugas wajib diisi'));
+  }
+
+  if (status && !VALID_STATUSES.includes(status)) {
+    res.status(400);
+    return next(new Error(`Status tidak valid. Gunakan salah satu: ${VALID_STATUSES.join(', ')}`));
   }
 
   try {
@@ -152,7 +165,7 @@ router.put('/:id', async (req, res, next) => {
   }
 });
 
-// 4. PATCH /api/tasks/:id/status - Update Status Tugas Saja
+// 4. PATCH /api/tasks/:id/status - Update Status Tugas Saja (dipakai saat drag & drop kanban)
 router.patch('/:id/status', async (req, res, next) => {
   const taskId = parseInt(req.params.id, 10);
   const { status } = req.body;
@@ -163,10 +176,9 @@ router.patch('/:id/status', async (req, res, next) => {
     return next(new Error('ID tugas tidak valid'));
   }
 
-  const validStatuses = ['TODO', 'IN_PROGRESS', 'DONE'];
-  if (!status || !validStatuses.includes(status)) {
+  if (!status || !VALID_STATUSES.includes(status)) {
     res.status(400);
-    return next(new Error('Status tidak valid. Gunakan: TODO, IN_PROGRESS, atau DONE'));
+    return next(new Error(`Status tidak valid. Gunakan salah satu: ${VALID_STATUSES.join(', ')}`));
   }
 
   try {

@@ -20,8 +20,9 @@
   --secondary-container: #fd933d;
   --secondary-soft: #ffe6d1;
 
-  --danger: #ba1a1a;
-  --danger-bg: #ffdad6;
+  --danger: #d9381e; /* Warna merah yang jelas untuk teks & ikon */
+  --danger-bg: #fff1f0; /* Background merah keorenan tipis */
+  --danger-border: #ffccc7; /* Border tipis pemisah */
 
   --radius: 1rem;
   --radius-lg: 1.5rem;
@@ -38,6 +39,7 @@
 
 html, body {
   height: 100%;
+  overflow-x: hidden;
 }
 
 body {
@@ -63,6 +65,8 @@ body {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
+  width: 100%;
+  overflow-x: hidden;
 }
 
 .app-header {
@@ -73,6 +77,7 @@ body {
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--surface-high);
+  width: 100%;
 }
 
 .app-header-inner {
@@ -146,10 +151,11 @@ body {
 .app-main {
   flex: 1;
   display: flex;
-  align-items: center;      /* Tepat di tengah secara vertikal */
-  justify-content: center; /* Tepat di tengah secara horizontal */
-  padding: 16px;           /* Jarak aman di layar HP agar tidak nempel pinggir */
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
   width: 100%;
+  max-width: 100%;
 }
 
 .app-main-wide {
@@ -261,22 +267,22 @@ body {
   position: relative;
   display: flex;
   align-items: center;
-  width: 100%; /* Tambahkan ini agar memenuhi form */
+  width: 100%;
 }
 
 .input-icon {
   position: absolute;
   left: 14px;
-  top: 50%;                     /* <-- TAMBAHKAN INI */
-  transform: translateY(-50%);  /* <-- TAMBAHKAN INI */
+  top: 50%;
+  transform: translateY(-50%);
   font-size: 20px;
   color: var(--outline);
   pointer-events: none;
-  z-index: 2;                   /* <-- TAMBAHKAN INI */
+  z-index: 2;
 }
 
 .input-icon-wrap input {
-  padding-left: 44px  !important; /* <-- TAMBAHKAN !important */
+  padding-left: 44px !important;
 }
 
 .input-trailing-btn {
@@ -398,7 +404,6 @@ a:focus-visible,
   font-size: 18px;
 }
 
-/* Legacy .btn alias kept for compatibility */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -491,15 +496,16 @@ a:hover {
   width: 100%;
   max-width: 1120px;
   margin: 0 auto;
+  box-sizing: border-box;
 }
 
 .dashboard-header {
-  margin-bottom: 28px;
+  margin-bottom: 20px;
 }
 
 .dashboard-header h1 {
   font-weight: 800;
-  font-size: 2rem;
+  font-size: 1.6rem;
   color: var(--ink);
   margin-bottom: 6px;
 }
@@ -509,6 +515,7 @@ a:hover {
   display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
   background-color: var(--surface-lowest);
   border-radius: var(--radius-full);
   padding: 12px 18px;
@@ -526,6 +533,7 @@ a:hover {
   background: none;
   padding: 0;
   flex: 1;
+  width: 100%;
   box-shadow: none;
 }
 
@@ -573,6 +581,7 @@ a:hover {
   border-radius: var(--radius-lg);
   padding: 20px;
   margin-bottom: 20px;
+  width: 100%;
 }
 
 .new-project-form textarea,
@@ -595,8 +604,9 @@ a:hover {
 .project-grid {
   list-style: none;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 18px;
+  width: 100%;
 }
 
 .project-card {
@@ -606,6 +616,9 @@ a:hover {
   padding: 20px 20px 18px;
   box-shadow: var(--shadow-card);
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .project-card:hover {
@@ -653,6 +666,8 @@ a:hover {
   margin-top: 14px;
   padding-top: 14px;
   border-top: 1px dashed var(--surface-high);
+  width: 100%;
+  min-width: 0;
 }
 
 .task-empty {
@@ -665,6 +680,7 @@ a:hover {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  width: 100%;
 }
 
 .task-item {
@@ -675,6 +691,7 @@ a:hover {
   padding: 10px 12px;
   border-radius: var(--radius);
   background-color: var(--surface-low);
+  width: 100%;
 }
 
 .task-item-main {
@@ -704,9 +721,11 @@ a:hover {
   white-space: nowrap;
 }
 
-.badge-status-todo { background-color: var(--surface); color: var(--ink-muted); }
-.badge-status-in_progress { background-color: var(--secondary-soft); color: #8a4a13; }
-.badge-status-done { background-color: var(--tertiary-soft); color: #0f7a52; }
+.badge-status-backlog { background-color: #e0f2fe; color: #0891b2; }
+.badge-status-todo { background-color: #dbeafe; color: #2563eb; }
+.badge-status-in_progress { background-color: #fef3c7; color: #b45309; }
+.badge-status-review { background-color: #ede9fe; color: #7c3aed; }
+.badge-status-done { background-color: #d1fae5; color: #0f7a52; }
 
 .badge-priority-low { background-color: var(--surface); color: var(--ink-muted); }
 .badge-priority-medium { background-color: #e4ecff; color: var(--primary); }
@@ -714,6 +733,230 @@ a:hover {
 
 .add-task-btn {
   width: auto;
+}
+
+/* ================= Status tabs (Horizontal Scroll Feature) ================= */
+.status-tabs {
+  display: flex;
+  gap: 6px;
+  background-color: var(--surface-low);
+  border-radius: var(--radius-full);
+  padding: 6px;
+  margin-bottom: 16px;
+
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x mandatory;
+}
+
+.status-tabs::-webkit-scrollbar {
+  display: none;
+}
+.status-tabs {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.status-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  padding: 8px 14px;
+  border-radius: var(--radius-full);
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--ink-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+  scroll-snap-align: start;
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.status-tab:hover:not(.active) {
+  background-color: var(--surface-high);
+}
+
+.status-tab.active {
+  background: linear-gradient(135deg, #0891b2, #0e7490);
+  color: #ffffff;
+  box-shadow: 0 8px 16px -8px rgba(8, 145, 178, 0.6);
+}
+
+.status-tab-count {
+  background-color: rgba(11, 28, 48, 0.08);
+  color: inherit;
+  border-radius: var(--radius-full);
+  padding: 1px 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.status-tab.active .status-tab-count {
+  background-color: rgba(255, 255, 255, 0.25);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.dot-backlog { background-color: #0891b2; }
+.dot-todo { background-color: #3b82f6; }
+.dot-in-progress { background-color: #f59e0b; }
+.dot-review { background-color: #8b5cf6; }
+.dot-done { background-color: #10b981; }
+
+.status-tab.active .status-dot {
+  background-color: #a5f3fc;
+}
+
+/* ================= Task items ================= */
+.task-item-stacked {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+}
+
+.task-item-main-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+}
+
+.task-title-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.task-expand-icon {
+  font-size: 18px;
+  color: var(--outline);
+  flex-shrink: 0;
+}
+
+.task-detail-body {
+  padding: 12px;
+  background-color: var(--surface);
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.task-detail-desc {
+  color: var(--ink);
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-height: 120px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+/* Bagian Tenggat Waktu (Sesuai Permintaan) */
+.task-detail-due {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--danger);
+  font-size: 0.82rem;
+  font-weight: 700;
+  background-color: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+
+.task-detail-due-icon {
+  font-size: 18px;
+  color: var(--danger);
+  flex-shrink: 0;
+}
+
+.task-item-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.task-item-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* Controls pindah status */
+.task-move-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.move-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border: none;
+  border-radius: var(--radius-full);
+  background-color: var(--surface);
+  color: var(--ink-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 6px 10px;
+  cursor: pointer;
+  min-height: 32px;
+  min-width: 32px;
+  flex: 0 0 auto;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.move-btn .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.move-btn-primary {
+  background-color: var(--surface-high);
+  color: var(--primary);
+  flex: 0 0 auto;
+  padding: 6px 12px;
+}
+
+.move-btn-primary .move-btn-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.move-btn:hover:not(:disabled) {
+  background-color: var(--primary-container);
+  color: #ffffff;
+}
+
+.move-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 /* ================= Empty / loading / error states ================= */
@@ -724,6 +967,7 @@ a:hover {
   text-align: center;
   color: var(--ink-muted);
   background-color: var(--surface-lowest);
+  width: 100%;
 }
 
 .state-message {
@@ -761,7 +1005,7 @@ a:hover {
   .spinner { animation-duration: 1.6s; }
 }
 
-/* ================= Bottom nav (dashboard only) ================= */
+/* ================= Bottom nav (dashboard) ================= */
 .bottom-nav {
   position: sticky;
   bottom: 0;
@@ -774,6 +1018,7 @@ a:hover {
   -webkit-backdrop-filter: blur(16px);
   border-top: 1px solid var(--surface-high);
   padding: 10px 16px;
+  width: 100%;
 }
 
 .bottom-nav-item {
@@ -806,19 +1051,28 @@ a:hover {
   font-size: 22px;
 }
 
-/* ================= Responsive ================= */
+/* ================= Responsive adjustments ================= */
 @media (max-width: 480px) {
   .app-header-inner {
-    padding: 12px 16px;
+    padding: 10px 14px;
   }
 
   .app-main {
-    padding: 28px 16px 48px;
+    padding: 16px 12px 40px;
+  }
+
+  .dashboard-header {
+    margin-bottom: 16px;
+  }
+
+  .dashboard-header h1 {
+    font-size: 1.35rem;
+    line-height: 1.3;
   }
 
   .auth-card,
   .card {
-    padding: 32px 22px;
+    padding: 24px 16px;
   }
 
   .project-grid {
@@ -828,9 +1082,404 @@ a:hover {
   .project-list-header {
     flex-direction: column;
     align-items: flex-start;
+    gap: 10px;
   }
 
   .form-row {
     grid-template-columns: 1fr;
   }
+
+  .status-tabs {
+    padding: 4px;
+    gap: 4px;
+    border-radius: 12px;
+  }
+
+  .status-tab {
+    padding: 7px 12px;
+    font-size: 0.75rem;
+  }
+
+  .move-btn-label {
+    display: none;
+  }
+
+  .move-btn {
+    padding: 6px;
+    min-width: 32px;
+    height: 32px;
+  }
+
+  .move-btn-primary {
+    flex: 0 0 auto;
+    padding: 6px 8px;
+  }
+}
+
+/* ==========================================
+   MODAL STYLES (Center Modal + Overlay)
+   ========================================== */
+
+/* Latar belakang gelap transparan & centering layar */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(15, 23, 42, 0.45); /* Efek gelap transparan */
+  backdrop-filter: blur(4px); /* Efek blur halus di latar belakang */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999; /* Selalu berada di lapisan paling atas */
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+/* Kotak Modal Popup */
+.modal-content {
+  background: #ffffff;
+  width: 100%;
+  max-width: 420px;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  animation: modalScaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Animasi saat modal muncul */
+@keyframes modalScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Header Modal */
+.modal-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.modal-icon {
+  font-size: 24px;
+  color: #6366f1;
+}
+
+/* Teks Bodi Modal */
+.modal-body {
+  margin: 0;
+  font-size: 0.938rem;
+  color: #475569;
+  line-height: 1.5;
+}
+
+.modal-body strong {
+  color: #0f172a;
+}
+
+/* Alur Perpindahan Status (Badge) */
+.status-flow-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background-color: #f8fafc;
+  padding: 12px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  font-size: 0.85rem;
+}
+
+.status-flow-badge .material-symbols-outlined {
+  font-size: 18px;
+  color: #94a3b8;
+}
+
+.badge-flow {
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+}
+
+.badge-flow.target {
+  color: #2563eb;
+}
+
+/* Tombol Aksi */
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+/* ==========================================
+   MODAL CONFIRMATION (Ringkas & Center)
+   ========================================== */
+
+/* Overlay Latar Belakang */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(4px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+/* Kotak Modal Ringkas */
+.modal-content {
+  background: #ffffff;
+  width: 90%;
+  max-width: 320px;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  animation: modalScaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes modalScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Header Modal */
+.modal-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.modal-icon {
+  font-size: 20px;
+  color: #6366f1;
+}
+
+/* Penjelasan Teks */
+.modal-body {
+  margin: 0;
+  font-size: 0.825rem;
+  color: #475569;
+  line-height: 1.4;
+}
+
+.modal-body strong {
+  color: #0f172a;
+}
+
+/* Alur Status */
+.status-flow-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background-color: #f8fafc;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.status-flow-badge .material-symbols-outlined {
+  font-size: 16px;
+  color: #94a3b8;
+}
+
+.badge-flow {
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+}
+
+.badge-flow.target {
+  color: #2563eb;
+}
+
+/* Tombol Aksi */
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.modal-actions button {
+  padding: 6px 12px;
+  font-size: 0.8rem;
+}
+
+/* Ikon Peringatan Hapus */
+.modal-icon.danger-icon {
+  color: #ef4444;
+}
+
+/* Tombol Hapus/Baya */
+.btn-danger {
+  background-color: #ef4444;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.btn-danger:hover {
+  background-color: #dc2626;
+}
+
+/* ==========================================
+   STYLING FORM EDIT (PROYEK & TUGAS)
+   ========================================== */
+
+/* Pastikan header form relatif agar tombol close pas di pojok kanan */
+.form-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+/* Styling Tombol Silang (Close) */
+.btn-close {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.btn-close:hover {
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+
+.btn-close .material-symbols-outlined {
+  font-size: 18px;
+}
+
+/* Styling Tombol Batal (Ghost Button) */
+.btn-ghost {
+  background: transparent;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 0.825rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-ghost:hover {
+  background-color: #f8fafc;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+/* ==========================================
+   STYLING TOMBOL FORM TUGAS & PROYEK
+   ========================================== */
+
+/* Container Tombol */
+.form-actions,
+.new-task-form-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  width: 100%;
+}
+
+/* Tombol Utamanya (Simpan / Tambah) */
+.form-actions .btn-gradient,
+.new-task-form-actions .btn-gradient {
+  flex: 1;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Tombol Batal */
+.form-actions .btn-ghost,
+.new-task-form-actions .btn-ghost {
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #475569;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 0.825rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.form-actions .btn-ghost:hover,
+.new-task-form-actions .btn-ghost:hover {
+  background-color: #e2e8f0;
+  border-color: #94a3b8;
+  color: #0f172a;
 }
