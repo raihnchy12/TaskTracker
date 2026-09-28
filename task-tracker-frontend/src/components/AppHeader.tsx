@@ -1,4 +1,6 @@
+// src/components/AppHeader.tsx
 import { useNavigate } from 'react-router-dom';
+import { useTheme } from '../hooks/useTheme';
 
 interface AppHeaderProps {
   subtitle?: string;
@@ -6,6 +8,7 @@ interface AppHeaderProps {
 
 export default function AppHeader({ subtitle = 'Task Manager' }: AppHeaderProps) {
   const navigate = useNavigate();
+  const { theme, toggleTheme } = useTheme();
 
   // Cek apakah user sedang terautentikasi (memiliki token di localStorage)
   const isAuthenticated = Boolean(localStorage.getItem('token'));
@@ -14,7 +17,7 @@ export default function AppHeader({ subtitle = 'Task Manager' }: AppHeaderProps)
     // 1. Hapus token JWT & data user
     localStorage.removeItem('token');
     localStorage.removeItem('user');
-    
+
     // 2. Lempar kembali ke halaman login
     navigate('/login', { replace: true });
   };
@@ -33,17 +36,33 @@ export default function AppHeader({ subtitle = 'Task Manager' }: AppHeaderProps)
           </div>
         </div>
 
-        {/* Action Button / Logout (Hanya tampil jika user sudah login) */}
-        {isAuthenticated && (
-          <button 
-            onClick={handleLogout} 
-            className="btn-ghost"
-            title="Keluar dari akun"
+        {/* Action Group: Theme Toggle & Logout */}
+        <div className="app-header-actions">
+          <button
+            type="button"
+            className="theme-toggle-btn"
+            onClick={toggleTheme}
+            title={theme === 'dark' ? 'Ganti ke Mode Terang' : 'Ganti ke Mode Gelap'}
+            aria-label="Toggle theme mode"
           >
-            <span className="material-symbols-outlined">logout</span>
-            Keluar
+            <span className="material-symbols-outlined theme-icon">
+              {theme === 'dark' ? 'light_mode' : 'dark_mode'}
+            </span>
+
           </button>
-        )}
+
+          {isAuthenticated && (
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="btn-ghost btn-logout"
+              title="Keluar dari akun"
+            >
+              <span className="material-symbols-outlined">logout</span>
+              <span className="btn-logout-label">Keluar</span>
+            </button>
+          )}
+        </div>
       </div>
     </header>
   );

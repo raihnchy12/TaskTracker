@@ -1,5 +1,3 @@
-// src/components/StatusTabs.tsx
-
 import type { Task } from '../types';
 
 export type TaskStatus = Task['status'];
@@ -16,20 +14,23 @@ interface StatusTabsProps {
   tasks: Task[];
   active: TaskStatus;
   onChange: (status: TaskStatus) => void;
+  // Prop baru untuk menerima jumlah total per status dari server/seluruh data
+  totalCounts?: Record<TaskStatus, number>;
 }
 
-export default function StatusTabs({ tasks, active, onChange }: StatusTabsProps) {
+export default function StatusTabs({ tasks, active, onChange, totalCounts }: StatusTabsProps) {
   return (
     <div className="status-tabs">
       {STATUS_CONFIG.map((s) => {
-        const count = tasks.filter((t) => t.status === s.value).length;
-        const isActive = s.value === active;
+        // Jika totalCounts dikirim dari parent, gunakan nilainya.
+        // Jika tidak ada, fallback ke perhitungan lokal dari array tasks.
+        const count = totalCounts ? (totalCounts[s.value] ?? 0) : tasks.filter((t) => t.status === s.value).length;
 
         return (
           <button
             key={s.value}
             type="button"
-            className={`status-tab ${isActive ? 'active' : ''}`}
+            className={`status-tab ${s.value === active ? 'active' : ''}`}
             onClick={() => onChange(s.value)}
           >
             <span className={`status-dot ${s.dotClass}`} aria-hidden="true" />

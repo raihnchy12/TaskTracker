@@ -15,26 +15,109 @@ const parseValidDate = (dateString) => {
   return dateString;
 };
 
-// 1. GET /api/tasks/project/:projectId - Ambil semua tugas berdasarkan Project ID
+// 1. GET /api/tasks/project/:projectId - Ambil tugas berdasarkan Project ID (dengan Filter, Search, Sort & Pagination BE-23)
 router.get('/project/:projectId', async (req, res, next) => {
   const { projectId } = req.params;
   const userId = req.user.id;
 
+  // Baca Query Parameters dari URL (BE-23)
+  const { search, priority, status, sort, page, limit } = req.query;
+
   try {
-    const queryText = `
+    // Array parameter dinamis untuk PostgreSQL query
+    const queryParams = [projectId, userId];
+    
+    // Syarat Wajib: project_id cocok & dikelola oleh owner yang sedang login
+    let whereClause = `WHERE tasks.project_id = $1 AND projects.owner_id = $2`;
+
+    // 1. Pencarian Teks (Judul atau Deskripsi)
+    if (search && search.trim() !== '') {
+      queryParams.push(`%${search.trim()}%`);
+      whereClause += ` AND (tasks.title ILIKE $${queryParams.length} OR tasks.description ILIKE $${queryParams.length})`;
+    }
+
+    // 2. Filter Prioritas (HIGH, MEDIUM, LOW)
+    if (priority && priority.trim() !== '' && priority !== 'ALL') {
+      queryParams.push(priority.trim().toUpperCase());
+      whereClause += ` AND tasks.priority = $${queryParams.length}`;
+    }
+
+    // 3. Filter Status Kolom (BACKLOG, TODO, IN_PROGRESS, REVIEW, DONE)
+    if (status && status.trim() !== '' && VALID_STATUSES.includes(status.trim().toUpperCase())) {
+      queryParams.push(status.trim().toUpperCase());
+      whereClause += ` AND tasks.status = $${queryParams.length}`;
+    }
+
+    // 4. Pengurutan (Sorting)
+    let orderByClause = `ORDER BY tasks.id ASC`;
+    if (sort === 'dueDate') {
+      // Tenggat terdekat didahulukan (data tanpa due_date ditaruh di paling belakang)
+      orderByClause = `ORDER BY tasks.due_date ASC NULLS LAST, tasks.id ASC`;
+    } else if (sort === 'priority') {
+      // Prioritas tertinggi ke terendah
+      orderByClause = `ORDER BY CASE tasks.priority 
+                          WHEN 'HIGH' THEN 1 
+                          WHEN 'MEDIUM' THEN 2 
+                          WHEN 'LOW' THEN 3 
+                          ELSE 4 
+                        END ASC, tasks.id ASC`;
+    } else if (sort === 'createdAt') {
+      orderByClause = `ORDER BY tasks.id DESC`;
+    }
+
+    // 5. Hitung total data yang cocok (untuk Metadata Pagination)
+    const countQuery = `
+      SELECT COUNT(tasks.id) AS total_count
+      FROM tasks 
+      JOIN projects ON tasks.project_id = projects.id
+      ${whereClause}
+    `;
+    const countResult = await db.query(countQuery, queryParams);
+    const totalTasks = parseInt(countResult.rows[0].total_count, 10);
+
+    // 6. Pagination (Page & Limit)
+    let paginationClause = '';
+    let pageNum = null;
+    let limitNum = null;
+    let totalPages = 1;
+
+    if (page || limit) {
+      pageNum = parseInt(page, 10) || 1;
+      limitNum = parseInt(limit, 10) || 10;
+      const offset = (pageNum - 1) * limitNum;
+
+      queryParams.push(limitNum);
+      const limitParamIndex = queryParams.length;
+
+      queryParams.push(offset);
+      const offsetParamIndex = queryParams.length;
+
+      paginationClause = `LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex}`;
+      totalPages = Math.ceil(totalTasks / limitNum) || 1;
+    }
+
+    // 7. Eksekusi Query Utama
+    const mainQuery = `
       SELECT tasks.* 
       FROM tasks 
       JOIN projects ON tasks.project_id = projects.id
-      WHERE tasks.project_id = $1 AND projects.owner_id = $2
-      ORDER BY tasks.id ASC
+      ${whereClause}
+      ${orderByClause}
+      ${paginationClause}
     `;
 
-    const result = await db.query(queryText, [projectId, userId]);
+    const result = await db.query(mainQuery, queryParams);
 
     res.json({
       success: true,
-      total: result.rows.length,
-      data: result.rows
+      total: totalTasks,
+      data: result.rows,
+      pagination: (page || limit) ? {
+        currentPage: pageNum,
+        totalPages: totalPages,
+        totalTasks: totalTasks,
+        limit: limitNum
+      } : null
     });
   } catch (err) {
     next(err);

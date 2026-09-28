@@ -134,13 +134,8 @@ export default function ProjectList({ onRequestMove }: ProjectListProps) {
     }
   };
 
-  // Handler Hapus Proyek
+  // Handler Hapus Proyek (Konfirmasi sudah dilakukan via ConfirmModal di ProjectCard)
   const handleDeleteProject = async (projectId: number) => {
-    const confirmed = window.confirm(
-      "Hapus proyek ini beserta seluruh tugasnya?",
-    );
-    if (!confirmed) return;
-
     try {
       await fetchApi<ApiResponse<Project>>(`/projects/${projectId}`, {
         method: "DELETE",
