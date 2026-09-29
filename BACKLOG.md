@@ -111,7 +111,7 @@ Sprint 4 (Hari 22 - 30) : [░░░░░░░░░░░░░░░░░�
 
 ### 📅 Hari 20 – 21: Validasi Skema & Notifikasi Feedback Pengguna
 
-- [ ] **BE-24**: Implementasi skema validasi request terpusat (misal menggunakan Joi atau Zod) untuk body request auth, project, dan task.
+- [x] **BE-24**: Implementasi skema validasi request terpusat (misal menggunakan Joi atau Zod) untuk body request auth, project, dan task.
 - [x] **FE-25**: Komponen Toast Notifications global (`Toast.tsx` tipe: Success, Error, Info) untuk menggantikan penggunaan `alert()` bawaan browser.
 - [x] **FE-26**: Indikator visual progres penyelesaian proyek (Progress Bar: persentase tugas dengan status `DONE` dibandingkan total tugas dalam proyek) dengan lencana status interaktif.
 

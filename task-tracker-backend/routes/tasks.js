@@ -2,320 +2,175 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 
-// Daftar status yang valid untuk papan Kanban (Backlog -> To Do -> In Progress -> Review -> Done)
-const VALID_STATUSES = ['BACKLOG', 'TODO', 'IN_PROGRESS', 'REVIEW', 'DONE'];
+// Import Middleware & Schema Validasi
+const validate = require('../middleware/validateMiddleware');
+const { createTaskSchema, updateTaskStatusSchema } = require('../schemas/taskSchema');
 
-// Helper untuk sanitasi tanggal sebelum masuk ke query PostgreSQL
-const parseValidDate = (dateString) => {
-  if (!dateString || dateString.trim() === '') return null;
-  const parsedDate = new Date(dateString);
-  if (isNaN(parsedDate.getTime()) || parsedDate.getFullYear() > 9999) {
-    return null;
-  }
-  return dateString;
-};
-
-// 1. GET /api/tasks/project/:projectId - Ambil tugas berdasarkan Project ID (dengan Filter, Search, Sort & Pagination BE-23)
+// 1. GET /api/tasks/project/:projectId - Ambil semua task per proyek
 router.get('/project/:projectId', async (req, res, next) => {
   const { projectId } = req.params;
-  const userId = req.user.id;
+  const { page = 1, limit = 5, sort = 'dueDate', search, priority } = req.query;
 
-  // Baca Query Parameters dari URL (BE-23)
-  const { search, priority, status, sort, page, limit } = req.query;
+  const parsedPage = parseInt(page, 10) || 1;
+  const parsedLimit = parseInt(limit, 10) || 5;
+  const offset = (parsedPage - 1) * parsedLimit;
 
   try {
-    // Array parameter dinamis untuk PostgreSQL query
-    const queryParams = [projectId, userId];
-    
-    // Syarat Wajib: project_id cocok & dikelola oleh owner yang sedang login
-    let whereClause = `WHERE tasks.project_id = $1 AND projects.owner_id = $2`;
+    let baseQuery = 'FROM tasks WHERE project_id = $1';
+    const queryParams = [projectId];
+    let paramIndex = 2;
 
-    // 1. Pencarian Teks (Judul atau Deskripsi)
-    if (search && search.trim() !== '') {
-      queryParams.push(`%${search.trim()}%`);
-      whereClause += ` AND (tasks.title ILIKE $${queryParams.length} OR tasks.description ILIKE $${queryParams.length})`;
+    if (search) {
+      baseQuery += ` AND (LOWER(title) LIKE LOWER($${paramIndex}) OR LOWER(description) LIKE LOWER($${paramIndex}))`;
+      queryParams.push(`%${search}%`);
+      paramIndex++;
     }
 
-    // 2. Filter Prioritas (HIGH, MEDIUM, LOW)
-    if (priority && priority.trim() !== '' && priority !== 'ALL') {
-      queryParams.push(priority.trim().toUpperCase());
-      whereClause += ` AND tasks.priority = $${queryParams.length}`;
+    if (priority && priority !== 'ALL') {
+      baseQuery += ` AND priority = $${paramIndex}`;
+      queryParams.push(priority);
+      paramIndex++;
     }
 
-    // 3. Filter Status Kolom (BACKLOG, TODO, IN_PROGRESS, REVIEW, DONE)
-    if (status && status.trim() !== '' && VALID_STATUSES.includes(status.trim().toUpperCase())) {
-      queryParams.push(status.trim().toUpperCase());
-      whereClause += ` AND tasks.status = $${queryParams.length}`;
-    }
+    const countResult = await db.query(`SELECT COUNT(*) ${baseQuery}`, queryParams);
+    const totalTasks = parseInt(countResult.rows[0].count, 10);
+    const totalPages = Math.ceil(totalTasks / parsedLimit) || 1;
 
-    // 4. Pengurutan (Sorting)
-    let orderByClause = `ORDER BY tasks.id ASC`;
+    let orderBy = 'ORDER BY created_at DESC';
     if (sort === 'dueDate') {
-      // Tenggat terdekat didahulukan (data tanpa due_date ditaruh di paling belakang)
-      orderByClause = `ORDER BY tasks.due_date ASC NULLS LAST, tasks.id ASC`;
+      orderBy = 'ORDER BY due_date ASC NULLS LAST';
     } else if (sort === 'priority') {
-      // Prioritas tertinggi ke terendah
-      orderByClause = `ORDER BY CASE tasks.priority 
-                          WHEN 'HIGH' THEN 1 
-                          WHEN 'MEDIUM' THEN 2 
-                          WHEN 'LOW' THEN 3 
-                          ELSE 4 
-                        END ASC, tasks.id ASC`;
-    } else if (sort === 'createdAt') {
-      orderByClause = `ORDER BY tasks.id DESC`;
+      orderBy = `ORDER BY CASE priority WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 WHEN 'LOW' THEN 3 ELSE 4 END ASC`;
     }
 
-    // 5. Hitung total data yang cocok (untuk Metadata Pagination)
-    const countQuery = `
-      SELECT COUNT(tasks.id) AS total_count
-      FROM tasks 
-      JOIN projects ON tasks.project_id = projects.id
-      ${whereClause}
-    `;
-    const countResult = await db.query(countQuery, queryParams);
-    const totalTasks = parseInt(countResult.rows[0].total_count, 10);
+    const tasksQuery = `SELECT * ${baseQuery} ${orderBy} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    queryParams.push(parsedLimit, offset);
 
-    // 6. Pagination (Page & Limit)
-    let paginationClause = '';
-    let pageNum = null;
-    let limitNum = null;
-    let totalPages = 1;
+    const tasksResult = await db.query(tasksQuery, queryParams);
 
-    if (page || limit) {
-      pageNum = parseInt(page, 10) || 1;
-      limitNum = parseInt(limit, 10) || 10;
-      const offset = (pageNum - 1) * limitNum;
-
-      queryParams.push(limitNum);
-      const limitParamIndex = queryParams.length;
-
-      queryParams.push(offset);
-      const offsetParamIndex = queryParams.length;
-
-      paginationClause = `LIMIT $${limitParamIndex} OFFSET $${offsetParamIndex}`;
-      totalPages = Math.ceil(totalTasks / limitNum) || 1;
-    }
-
-    // 7. Eksekusi Query Utama
-    const mainQuery = `
-      SELECT tasks.* 
-      FROM tasks 
-      JOIN projects ON tasks.project_id = projects.id
-      ${whereClause}
-      ${orderByClause}
-      ${paginationClause}
-    `;
-
-    const result = await db.query(mainQuery, queryParams);
-
-    res.json({
+    return res.status(200).json({
       success: true,
-      total: totalTasks,
-      data: result.rows,
-      pagination: (page || limit) ? {
-        currentPage: pageNum,
-        totalPages: totalPages,
-        totalTasks: totalTasks,
-        limit: limitNum
-      } : null
+      data: tasksResult.rows,
+      pagination: {
+        currentPage: parsedPage,
+        totalPages,
+        totalTasks,
+        limit: parsedLimit,
+      },
     });
   } catch (err) {
     next(err);
   }
 });
 
-// 2. POST /api/tasks - Tambah tugas baru ke proyek
-router.post('/', async (req, res, next) => {
+// 2. POST /api/tasks - Buat task baru (Diproteksi dengan createTaskSchema)
+router.post('/', validate(createTaskSchema), async (req, res, next) => {
   const { project_id, title, description, status, priority, due_date } = req.body;
-  const userId = req.user.id;
-
-  if (!project_id || !title || !title.trim()) {
-    res.status(400);
-    return next(new Error('project_id dan title wajib diisi'));
-  }
-
-  if (status && !VALID_STATUSES.includes(status)) {
-    res.status(400);
-    return next(new Error(`Status tidak valid. Gunakan salah satu: ${VALID_STATUSES.join(', ')}`));
-  }
 
   try {
-    const projectCheck = await db.query(
-      'SELECT id FROM projects WHERE id = $1 AND owner_id = $2',
-      [project_id, userId]
+    const result = await db.query(
+      `INSERT INTO tasks (project_id, title, description, status, priority, due_date)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [
+        project_id,
+        title,
+        description || null,
+        status || 'BACKLOG',
+        priority || 'MEDIUM',
+        due_date || null,
+      ]
     );
 
-    if (projectCheck.rows.length === 0) {
-      res.status(404);
-      return next(new Error('Proyek tidak ditemukan atau kamu tidak memiliki akses ke proyek ini'));
-    }
-
-    const cleanDueDate = parseValidDate(due_date);
-
-    const queryText = `
-      INSERT INTO tasks (project_id, title, description, status, priority, due_date)
-      VALUES ($1, $2, $3, $4, $5, $6)
-      RETURNING *
-    `;
-    const values = [
-      project_id, 
-      title.trim(), 
-      description && description.trim() !== '' ? description.trim() : null, 
-      status || 'BACKLOG', 
-      priority || 'MEDIUM', 
-      cleanDueDate
-    ];
-
-    const result = await db.query(queryText, values);
-
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
-      message: 'Tugas berhasil ditambahkan',
-      data: result.rows[0]
+      message: 'Tugas berhasil dibuat',
+      data: result.rows[0],
     });
   } catch (err) {
     next(err);
   }
 });
 
-// 3. PUT /api/tasks/:id - Edit Detail Lengkap Tugas (Title, Description, Status, Priority, Due Date)
-router.put('/:id', async (req, res, next) => {
-  const taskId = parseInt(req.params.id, 10);
-  const userId = req.user.id;
-  const { title, description, status, priority, due_date } = req.body;
-
-  if (isNaN(taskId)) {
-    res.status(400);
-    return next(new Error('ID tugas tidak valid'));
-  }
-
-  if (!title || !title.trim()) {
-    res.status(400);
-    return next(new Error('Title tugas wajib diisi'));
-  }
-
-  if (status && !VALID_STATUSES.includes(status)) {
-    res.status(400);
-    return next(new Error(`Status tidak valid. Gunakan salah satu: ${VALID_STATUSES.join(', ')}`));
-  }
-
-  try {
-    const existingTask = await db.query(
-      `SELECT status FROM tasks 
-       WHERE id = $1 AND project_id IN (SELECT id FROM projects WHERE owner_id = $2)`,
-      [taskId, userId]
-    );
-
-    if (existingTask.rows.length === 0) {
-      res.status(404);
-      return next(new Error('Tugas tidak ditemukan atau kamu tidak memiliki akses untuk mengubahnya'));
-    }
-
-    const currentStatus = existingTask.rows[0].status;
-    const cleanDueDate = parseValidDate(due_date);
-
-    const queryText = `
-      UPDATE tasks 
-      SET title = $1, 
-          description = $2, 
-          status = $3, 
-          priority = $4, 
-          due_date = $5 
-      WHERE id = $6 
-      AND project_id IN (SELECT id FROM projects WHERE owner_id = $7)
-      RETURNING *
-    `;
-
-    const values = [
-      title.trim(), 
-      description && description.trim() !== '' ? description.trim() : null, 
-      status || currentStatus, 
-      priority || 'MEDIUM', 
-      cleanDueDate, 
-      taskId, 
-      userId
-    ];
-
-    const result = await db.query(queryText, values);
-
-    res.json({
-      success: true,
-      message: 'Tugas berhasil diperbarui',
-      data: result.rows[0]
-    });
-  } catch (err) {
-    next(err);
-  }
-});
-
-// 4. PATCH /api/tasks/:id/status - Update Status Tugas Saja (dipakai saat drag & drop kanban)
-router.patch('/:id/status', async (req, res, next) => {
-  const taskId = parseInt(req.params.id, 10);
+// 3. PATCH /api/tasks/:id/status - Update status task (Diproteksi dengan updateTaskStatusSchema)
+router.patch('/:id/status', validate(updateTaskStatusSchema), async (req, res, next) => {
+  const { id } = req.params;
   const { status } = req.body;
-  const userId = req.user.id;
 
-  if (isNaN(taskId)) {
-    res.status(400);
-    return next(new Error('ID tugas tidak valid'));
-  }
+  try {
+    const result = await db.query(
+      'UPDATE tasks SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
+      [status, id]
+    );
 
-  if (!status || !VALID_STATUSES.includes(status)) {
-    res.status(400);
-    return next(new Error(`Status tidak valid. Gunakan salah satu: ${VALID_STATUSES.join(', ')}`));
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Tugas tidak ditemukan',
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Status tugas berhasil diperbarui',
+      data: result.rows[0],
+    });
+  } catch (err) {
+    next(err);
   }
+});
+
+// 4. PUT /api/tasks/:id - Edit detail task
+router.put('/:id', async (req, res, next) => {
+  const { id } = req.params;
+  const { title, description, status, priority, due_date } = req.body;
 
   try {
     const result = await db.query(
       `UPDATE tasks 
-       SET status = $1 
-       WHERE id = $2 
-       AND project_id IN (SELECT id FROM projects WHERE owner_id = $3)
-       RETURNING *`,
-      [status, taskId, userId]
+       SET title = COALESCE($1, title),
+           description = COALESCE($2, description),
+           status = COALESCE($3, status),
+           priority = COALESCE($4, priority),
+           due_date = COALESCE($5, due_date),
+           updated_at = NOW()
+       WHERE id = $6 RETURNING *`,
+      [title, description, status, priority, due_date, id]
     );
 
     if (result.rows.length === 0) {
-      res.status(404);
-      return next(new Error('Tugas tidak ditemukan atau kamu tidak memiliki akses untuk mengubahnya'));
+      return res.status(404).json({
+        success: false,
+        message: 'Tugas tidak ditemukan',
+      });
     }
 
-    res.json({
+    return res.status(200).json({
       success: true,
-      message: 'Status tugas berhasil diperbarui',
-      data: result.rows[0]
+      message: 'Tugas berhasil diperbarui',
+      data: result.rows[0],
     });
   } catch (err) {
     next(err);
   }
 });
 
-// 5. DELETE /api/tasks/:id - Hapus Tugas
+// 5. DELETE /api/tasks/:id - Hapus task
 router.delete('/:id', async (req, res, next) => {
-  const taskId = parseInt(req.params.id, 10);
-  const userId = req.user.id;
-
-  if (isNaN(taskId)) {
-    res.status(400);
-    return next(new Error('ID tugas tidak valid'));
-  }
+  const { id } = req.params;
 
   try {
-    const result = await db.query(
-      `DELETE FROM tasks 
-       WHERE id = $1 
-       AND project_id IN (SELECT id FROM projects WHERE owner_id = $2)
-       RETURNING id`,
-      [taskId, userId]
-    );
+    const result = await db.query('DELETE FROM tasks WHERE id = $1 RETURNING *', [id]);
 
     if (result.rows.length === 0) {
-      res.status(404);
-      return next(new Error('Tugas tidak ditemukan atau kamu tidak memiliki akses untuk menghapusnya'));
+      return res.status(404).json({
+        success: false,
+        message: 'Tugas tidak ditemukan',
+      });
     }
 
-    res.json({
+    return res.status(200).json({
       success: true,
-      message: 'Tugas berhasil dihapus'
+      message: 'Tugas berhasil dihapus',
     });
   } catch (err) {
     next(err);

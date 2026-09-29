@@ -2,6 +2,10 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db');
 
+// Import Middleware & Schema Validasi
+const validate = require('../middleware/validateMiddleware');
+const { createProjectSchema, updateProjectSchema } = require('../schemas/projectSchema');
+
 // 1. GET /api/projects - Ambil semua proyek milik user yang sedang login
 router.get('/', async (req, res, next) => {
   try {
@@ -19,15 +23,10 @@ router.get('/', async (req, res, next) => {
   }
 });
 
-// 2. POST /api/projects - Tambah proyek baru
-router.post('/', async (req, res, next) => {
+// 2. POST /api/projects - Tambah proyek baru (Diproteksi dengan createProjectSchema)
+router.post('/', validate(createProjectSchema), async (req, res, next) => {
   const { title, description } = req.body;
   const ownerId = req.user.id;
-
-  if (!title) {
-    res.status(400);
-    return next(new Error('Title proyek wajib diisi'));
-  }
 
   try {
     const result = await db.query(
@@ -47,16 +46,11 @@ router.post('/', async (req, res, next) => {
   }
 });
 
-// 3. PUT /api/projects/:id - Edit Proyek
-router.put('/:id', async (req, res, next) => {
+// 3. PUT /api/projects/:id - Edit Proyek (Diproteksi dengan updateProjectSchema)
+router.put('/:id', validate(updateProjectSchema), async (req, res, next) => {
   const projectId = req.params.id;
   const ownerId = req.user.id;
   const { title, description } = req.body;
-
-  if (!title) {
-    res.status(400);
-    return next(new Error('Title proyek wajib diisi'));
-  }
 
   try {
     const result = await db.query(

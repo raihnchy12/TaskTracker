@@ -4,19 +4,16 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const db = require('../db');
 
+// Import Middleware & Schema Validasi
+const validate = require('../middleware/validateMiddleware');
+const { registerSchema, loginSchema } = require('../schemas/authSchema');
+
 // Fallback JWT Secret kalau di env Railway belum terpasang
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_fallback_key_123';
 
-// 1. REGISTER USER BARU
-router.post('/register', async (req, res) => {
+// 1. REGISTER USER BARU (Diproteksi dengan registerSchema)
+router.post('/register', validate(registerSchema), async (req, res) => {
   const { name, email, password } = req.body;
-
-  if (!name || !email || !password) {
-    return res.status(400).json({
-      success: false,
-      message: 'Semua field (name, email, password) harus diisi'
-    });
-  }
 
   try {
     const saltRounds = 10;
@@ -42,16 +39,9 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// 2. LOGIN USER
-router.post('/login', async (req, res) => {
+// 2. LOGIN USER (Diproteksi dengan loginSchema)
+router.post('/login', validate(loginSchema), async (req, res) => {
   const { email, password } = req.body;
-
-  if (!email || !password) {
-    return res.status(400).json({
-      success: false,
-      message: 'Email dan password wajib diisi'
-    });
-  }
 
   try {
     const result = await db.query('SELECT * FROM users WHERE email = $1', [email]);
