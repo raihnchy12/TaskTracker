@@ -4,7 +4,7 @@ const db = require('../db');
 
 // Import Middleware & Schema Validasi
 const validate = require('../middleware/validateMiddleware');
-const { createTaskSchema, updateTaskStatusSchema } = require('../schemas/taskSchema');
+const { createTaskSchema, updateTaskStatusSchema, updateTaskSchema } = require('../schemas/taskSchema');
 
 // 1. GET /api/tasks/project/:projectId - Ambil semua task per proyek
 router.get('/project/:projectId', async (req, res, next) => {
@@ -120,7 +120,7 @@ router.patch('/:id/status', validate(updateTaskStatusSchema), async (req, res, n
 });
 
 // 4. PUT /api/tasks/:id - Edit detail task
-router.put('/:id', async (req, res, next) => {
+router.put('/:id', validate(updateTaskSchema), async (req, res, next) => {
   const { id } = req.params;
   const { title, description, status, priority, due_date } = req.body;
 

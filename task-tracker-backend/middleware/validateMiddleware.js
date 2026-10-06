@@ -6,12 +6,23 @@ const { ZodError } = require('zod');
  */
 const validate = (schema) => {
   return async (req, res, next) => {
+    if (!schema || typeof schema.parseAsync !== 'function') {
+      console.error('[VALIDATION ERROR]: Schema yang dikirim ke validate() bernilai undefined.');
+      return res.status(500).json({
+        success: false,
+        message: 'Konfigurasi skema validasi server tidak terdefinisi',
+      });
+    }
+
     try {
       req.body = await schema.parseAsync(req.body);
       next();
     } catch (error) {
       if (error instanceof ZodError) {
-        const formattedErrors = error.errors.map((err) => ({
+        // Ambil issue dari error.issues atau error.errors
+        const issues = error.issues || error.errors || [];
+        
+        const formattedErrors = issues.map((err) => ({
           field: err.path.join('.'),
           message: err.message,
         }));
