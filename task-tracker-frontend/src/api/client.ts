@@ -53,7 +53,7 @@ export interface Task {
   project_id: number;
   title: string;
   description?: string;
-  status: 'TODO' | 'IN_PROGRESS' | 'DONE';
+  status: 'BACKLOG' | 'TODO' | 'IN_PROGRESS' | 'REVIEW' | 'DONE';
   priority: 'LOW' | 'MEDIUM' | 'HIGH';
   due_date?: string | null;
   created_at?: string;
@@ -112,7 +112,7 @@ export async function createTask(data: {
   project_id: number;
   title: string;
   description?: string;
-  status?: 'TODO' | 'IN_PROGRESS' | 'DONE';
+  status?: 'BACKLOG' | 'TODO' | 'IN_PROGRESS' | 'REVIEW' | 'DONE';
   priority?: 'LOW' | 'MEDIUM' | 'HIGH';
   due_date?: string | null;
 }) {
@@ -128,7 +128,7 @@ export async function updateTask(
   data: {
     title: string;
     description?: string;
-    status?: 'TODO' | 'IN_PROGRESS' | 'DONE';
+    status?: 'BACKLOG' | 'TODO' | 'IN_PROGRESS' | 'REVIEW' | 'DONE';
     priority?: 'LOW' | 'MEDIUM' | 'HIGH';
     due_date?: string | null;
   }
@@ -140,7 +140,7 @@ export async function updateTask(
 }
 
 // Quick Update Status Task
-export async function updateTaskStatus(id: number, status: 'TODO' | 'IN_PROGRESS' | 'DONE') {
+export async function updateTaskStatus(id: number, status: 'BACKLOG' | 'TODO' | 'IN_PROGRESS' | 'REVIEW' | 'DONE') {
   return fetchApi<ApiResponse<Task>>(`/tasks/${id}/status`, {
     method: 'PATCH',
     body: JSON.stringify({ status }),

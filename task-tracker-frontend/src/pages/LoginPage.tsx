@@ -19,7 +19,7 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await fetchApi<AuthResponse>('/auth/login', {
+      const res = await fetchApi<AuthResponse>('/auth/login', { 
         method: 'POST',
         body: JSON.stringify({ email, password }),
       });

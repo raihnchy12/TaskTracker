@@ -113,13 +113,22 @@ body {
   width: 100%;
 }
 
+/* PERBAIKAN HEADER DESKTOP: Diperlebar max-width ke 1400px agar mepet kanan-kiri pas sejajar dashboard */
 .app-header-inner {
-  max-width: 1120px;
+  width: 100%;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 14px 24px;
+  padding: 14px 32px;
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+/* Mode Gelap untuk Header */
+[data-theme="dark"] .app-header,
+.dark .app-header {
+  background-color: rgba(15, 23, 42, 0.85);
+  border-bottom-color: rgba(255, 255, 255, 0.08);
 }
 
 .app-header-brand {
@@ -160,7 +169,7 @@ body {
   color: var(--ink-muted);
 }
 
-/* Decorative background blobs */
+/* Decorative background blobs (TETAP DIPERTAHANKAN) */
 .bg-blobs {
   position: fixed;
   inset: 0;
@@ -225,12 +234,11 @@ body {
 .app-main-wide {
   align-items: stretch;
 }
-
 /* ================= Auth card ================= */
 .auth-card,
 .card {
   position: relative;
-  background-color: rgba(255, 255, 255, 0.92);
+  background-color: var(--surface-lowest); /* <--- GANTI BARIS INI */
   backdrop-filter: blur(10px);
   border-radius: var(--radius-lg);
   padding: 40px 32px;
@@ -332,6 +340,8 @@ body {
   display: flex;
   align-items: center;
   width: 100%;
+  border-radius: 14px; /* Samakan dengan input */
+  overflow: hidden;    /* Potong bagian siku yang keluar */
 }
 
 .input-icon {
@@ -375,7 +385,7 @@ textarea {
   width: 100%;
   padding: 12px 14px;
   border: none;
-  border-radius: var(--radius);
+  border-radius: 14px;
   font-size: 0.95rem;
   font-family: 'Plus Jakarta Sans', sans-serif;
   background-color: var(--surface-low);
@@ -413,14 +423,33 @@ a:focus-visible,
   font-size: 0.82rem;
   color: var(--ink-muted);
   cursor: pointer;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  padding: 0 !important;
+  box-shadow: none !important; /* <--- Mencegah bayangan/garis pembungkus */
 }
 
-.checkbox-pill input {
+/* Mematikan semua border/shadow/outline bawaan pada input checkbox */
+.checkbox-pill input[type="checkbox"],
+input[type="checkbox"] {
   width: 18px;
   height: 18px;
   flex-shrink: 0;
   margin-top: 1px;
   accent-color: var(--tertiary-container);
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important; /* <--- Menghilangkan garis inset */
+  -webkit-appearance: checkbox; /* Pastikan hanya merender checkbox bawaan browser */
+}
+
+.form-group:has(.checkbox-pill),
+.input-icon-wrap:has(.checkbox-pill) {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
 }
 
 /* ================= Buttons ================= */
@@ -2857,7 +2886,7 @@ select {
   background-color: var(--surface-lowest) !important;
   color: var(--ink) !important;
   font-weight: 500 !important;
-}
+} 
 
 /* ==========================================
    PAGINATION CONTROL (LIGHT & DARK THEME)
@@ -2875,11 +2904,11 @@ select {
 
 .pagination-info {
   font-size: 0.78rem;
-  color: #64748b; /* Warna teks gelap transparan di mode terang */
+  color: #64748b;
 }
 
 .pagination-info strong {
-  color: #0f172a; /* Warna angka/teks tebal di mode terang */
+  color: #0f172a;
   font-weight: 600;
 }
 
@@ -2960,6 +2989,12 @@ select {
   color: #64748b;
 }
 
+/* 3. SEMBUNYIKAN PAGINATION DI DESKTOP (KANBAN BOARD) */
+@media (min-width: 768px) {
+  .pagination-bar {
+    display: none !important;
+  }
+}
 /* ==========================================
    2. STATUS TABS & BADGE COUNTER STYLES
    ========================================== */
@@ -3057,4 +3092,242 @@ select {
 .dark .status-tab.active .status-tab-count {
   background-color: #38bdf8;
   color: #0f172a;
+}
+
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover, 
+input:-webkit-autofill:focus, 
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 30px var(--surface-low) inset !important;
+  -webkit-text-fill-color: var(--ink) !important;
+  border-radius: 14px !important;
+}
+
+
+/* ==========================================
+   KANBAN BOARD DESKTOP MODE
+   ========================================== */
+
+/* 1. Di Mobile/HP (Default): Tetap gunakan layout satu kolom dengan Status Tabs */
+.kanban-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+.kanban-desktop-board {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 2. Di Desktop (Layar >= 1024px): Ubah Papan menjadi 5 Kolom Menyamping */
+@media (min-width: 1024px) {
+  /* Sembunyikan Status Tabs di Desktop karena semua kolom langsung terlihat */
+  .status-tabs {
+    display: none !important;
+  }
+
+  .kanban-desktop-board {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(220px, 1fr)); /* 5 Kolom: Backlog, Todo, Progress, Review, Done */
+    gap: 16px;
+    align-items: start;
+    overflow-x: auto;
+    padding-bottom: 12px;
+  }
+
+  .kanban-column {
+    background-color: var(--surface-low);
+    border-radius: var(--radius);
+    padding: 14px;
+    min-height: 450px; /* Area tempat melakukan DROP yang luas */
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border: 2px dashed transparent;
+    transition: border-color 0.2s ease, background-color 0.2s ease;
+  }
+
+  /* Efek visual saat item drag melayang di atas kolom */
+  .kanban-column.drag-over {
+    border-color: var(--primary-container);
+    background-color: var(--surface-high);
+  }
+
+  .kanban-column-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--ink);
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--outline-variant);
+    margin-bottom: 6px;
+  }
+
+  /* Sembunyikan tombol pindah manual jika di Desktop (karena sudah pakai Drag & Drop) */
+  .task-move-controls {
+    display: none !important;
+  }
+}
+
+/* Sembunyikan List Mobile jika di Desktop */
+@media (min-width: 1024px) {
+  .mobile-only-list {
+    display: none !important;
+  }
+}
+
+/* Sembunyikan Board Desktop jika di Mobile */
+@media (max-width: 1023px) {
+  .kanban-desktop-board {
+    display: none !important;
+  }
+}
+
+/* Kartu saat sedang di-drag */
+.task-item.dragging {
+  opacity: 0.4;
+  cursor: grabbing;
+}
+
+/* Placeholder saat kolom kosong */
+.empty-column-placeholder {
+  border: 1.5px dashed var(--outline-variant);
+  border-radius: var(--radius);
+  padding: 16px;
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--ink-muted);
+}
+
+/* ==========================================
+   FIX CONTAINER KANBAN SUPAYA MELEBAR DI DESKTOP
+   ========================================== */
+@media (min-width: 1024px) {
+  /* Izinkan container utama melebar hingga 100% atau 1400px */
+  .dashboard-container,
+  .app-main-wide,
+  .project-card,
+  .kanban-container {
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  /* Atur Grid Papan Kanban 5 Kolom */
+  .kanban-desktop-board {
+    display: grid !important;
+    grid-template-columns: repeat(5, minmax(220px, 1fr)) !important;
+    gap: 16px !important;
+    width: 100% !important;
+  }
+
+  /* Sembunyikan daftar khusus mobile jika ada */
+  .mobile-only-list,
+  .status-tabs {
+    display: none !important;
+  }
+}
+
+/* ==========================================
+   PERBAIKAN KANBAN DESKTOP & OVERFLOW
+   ========================================== */
+
+/* Pastikan semua child grid/flex tidak membuat teks/elemen meluap */
+.project-card,
+.task-panel,
+.kanban-container,
+.kanban-column,
+.task-item {
+  min-width: 0 !important;
+  box-sizing: border-box;
+}
+
+/* Jika Task Panel dibuka di dalam Project Card pada layar Desktop */
+@media (min-width: 1024px) {
+  /* Saat kartu proyek dibuka task-nya, biarkan kartu proyek mengambil lebar penuh */
+  .project-grid:has(.task-panel) {
+    display: flex !important;
+    flex-direction: column !important;
+    width: 100% !important;
+  }
+
+  .project-card:has(.task-panel) {
+    width: 100% !important;
+    max-width: 100% !important;
+    grid-column: 1 / -1 !important; /* Buat kartu proyek memenuhi seluruh baris grid */
+  }
+
+  /* Struktur Grid 5 Kolom Kanban */
+  .kanban-desktop-board {
+    display: grid !important;
+    grid-template-columns: repeat(5, minmax(200px, 1fr)) !important;
+    gap: 12px !important;
+    width: 100% !important;
+    margin-top: 14px;
+  }
+
+  /* Kolom Kanban */
+  .kanban-column {
+    background-color: var(--surface-low);
+    border-radius: var(--radius);
+    padding: 12px;
+    min-height: 400px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0 !important;
+  }
+
+  /* Sembunyikan elemen khusus mobile */
+  .mobile-only-list,
+  .status-tabs {
+    display: none !important;
+  }
+}
+
+/* Perbaikan Teks Tenggat Waktu & Detail Task Supaya Tidak Meluap (Overflow) */
+.task-detail-due,
+.task-detail-desc,
+.task-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+/* ==========================================
+   PERBAIKAN RESPONSIVE KANBAN vs TAB STATUS
+   ========================================== */
+
+/* 1. TAMPILAN DESKTOP (Layar >= 1024px) */
+@media (min-width: 1024px) {
+  /* Sembunyikan Tab Status di Desktop */
+  .tabs-view-container {
+    display: none !important;
+  }
+
+  /* Tampilkan Papan Kanban di Desktop */
+  .kanban-view-container {
+    display: block !important;
+    width: 100% !important;
+  }
+}
+
+/* 2. TAMPILAN MOBILE (Layar < 1024px) */
+@media (max-width: 1023px) {
+  /* Sembunyikan Papan Kanban total di HP */
+  .kanban-view-container {
+    display: none !important;
+  }
+
+  /* Tampilkan Tab Status di HP */
+  .tabs-view-container {
+    display: block !important;
+    width: 100% !important;
+  }
 }

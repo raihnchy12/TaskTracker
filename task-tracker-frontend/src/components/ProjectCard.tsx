@@ -1,4 +1,4 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, useEffect, useMemo, type FormEvent } from 'react';
 import { fetchApi } from '../api/client';
 import type { Project, Task, ApiResponse } from '../types';
 import StatusTabs, { type TaskStatus } from './StatusTabs';
@@ -35,6 +35,13 @@ const PRIORITY_LABEL: Record<Task['priority'], string> = {
   HIGH: 'Tinggi',
 };
 
+// Pemetaan bobot prioritas untuk sorting akurat
+const PRIORITY_WEIGHT: Record<Task['priority'], number> = {
+  HIGH: 3,
+  MEDIUM: 2,
+  LOW: 1,
+};
+
 const STATUS_ORDER: Task['status'][] = ['BACKLOG', 'TODO', 'IN_PROGRESS', 'REVIEW', 'DONE'];
 
 export default function ProjectCard({
@@ -45,27 +52,28 @@ export default function ProjectCard({
 }: ProjectCardProps) {
   const [expanded, setExpanded] = useState(false);
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [allTasksForCounts, setAllTasksForCounts] = useState<Task[]>([]); // Menyimpan seluruh task untuk hitungan badge
+  const [allTasksForCounts, setAllTasksForCounts] = useState<Task[]>([]); // Menyimpan seluruh task untuk hitungan badge & Kanban
   const [tasksLoaded, setTasksLoaded] = useState(false);
   const [loadingTasks, setLoadingTasks] = useState(false);
   const [tasksError, setTasksError] = useState('');
-
-  // Mode Tampilan: Papan Kanban visual vs Daftar Tab status
-  const [viewMode, setViewMode] = useState<'kanban' | 'tabs'>('kanban');
 
   // Filter, Search, Sorting & Pagination
   const [taskSearch, setTaskSearch] = useState('');
   const [priorityFilter, setPriorityFilter] = useState<'ALL' | Task['priority']>('ALL');
   const [sortBy, setSortBy] = useState<SortOption>('dueDate');
+  const [activeStatus, setActiveStatus] = useState<TaskStatus>('BACKLOG'); // Tab status aktif di mobile
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
+  const [, setTotalPages] = useState(1);
   const [totalServerTasks, setTotalServerTasks] = useState(0);
-
-  // Jika mode Kanban, muat seluruh task (limit 100). Jika Tab Status, tampilkan 5 task/halaman
-  const limit = viewMode === 'kanban' ? 100 : 5;
-
-  const [activeStatus, setActiveStatus] = useState<TaskStatus>('BACKLOG');
   const [expandedTaskId, setExpandedTaskId] = useState<number | null>(null);
+
+  // Reset halaman ke 1 setiap kali Tab Status, Priority, Search, atau Sort berubah
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeStatus, priorityFilter, taskSearch, sortBy]);
+
+  // Limit default untuk mode Tab Status
+  const limit = 5;
 
   // Form Tambah Tugas
   const [showNewTaskForm, setShowNewTaskForm] = useState(false);
@@ -91,23 +99,61 @@ export default function ProjectCard({
   const [showDeleteProjectModal, setShowDeleteProjectModal] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
 
-  // Memuat total task secara keseluruhan untuk menghitung Badge Tab Status (bebas dari limit pagination)
+  // Filter & Sorting Logic Front-End (Proses sorting prioritas tinggi ke rendah)
+  const filteredAndSortedTasks = useMemo(() => {
+    let result = allTasksForCounts.length > 0 ? [...allTasksForCounts] : [...tasks];
+
+    // Filter berdasarkan pencarian kata kunci
+    if (taskSearch.trim() !== '') {
+      result = result.filter(
+        (t) =>
+          t.title.toLowerCase().includes(taskSearch.toLowerCase()) ||
+          t.description?.toLowerCase().includes(taskSearch.toLowerCase())
+      );
+    }
+
+    // Filter berdasarkan prioritas dropdown
+    if (priorityFilter !== 'ALL') {
+      result = result.filter((t) => t.priority === priorityFilter);
+    }
+
+    // Process Pengurutan (Sorting)
+    result.sort((a, b) => {
+      if (sortBy === 'priority') {
+        // Urutkan dari bobot terbesar (HIGH = 3) ke terendah (LOW = 1)
+        return (PRIORITY_WEIGHT[b.priority] || 0) - (PRIORITY_WEIGHT[a.priority] || 0);
+      }
+
+      if (sortBy === 'dueDate') {
+        if (!a.due_date) return 1;
+        if (!b.due_date) return -1;
+        return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+      }
+
+      // Default: createdAt
+      return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
+    });
+
+    return result;
+  }, [tasks, allTasksForCounts, taskSearch, priorityFilter, sortBy]);
+
+  // Memuat total task secara keseluruhan untuk Kanban & Badge Tab Status
   const loadAllTasksForCounts = async () => {
     try {
       const res: any = await fetchApi(`/tasks/project/${project.id}?limit=1000`);
       setAllTasksForCounts(res.data || []);
     } catch {
-      // Fallback jika API gagal
+      // Fallback
     }
   };
 
-  // Memuat tugas dari Backend dengan query params
+  // Memuat tugas dari Backend
   const loadTasks = async () => {
     setLoadingTasks(true);
     setTasksError('');
     try {
       const queryParams = new URLSearchParams({
-        page: String(viewMode === 'kanban' ? 1 : currentPage),
+        page: String(currentPage),
         limit: String(limit),
         sort: sortBy,
       });
@@ -134,13 +180,13 @@ export default function ProjectCard({
     }
   };
 
-  // Reload data ketika ada perubahan state filter/pagination/viewMode
+  // Reload data ketika ada perubahan state filter/pagination
   useEffect(() => {
     if (expanded) {
       loadTasks();
       loadAllTasksForCounts();
     }
-  }, [expanded, viewMode, currentPage, taskSearch, priorityFilter, sortBy]);
+  }, [expanded, currentPage, taskSearch, priorityFilter, sortBy]);
 
   const toggleExpanded = () => {
     const next = !expanded;
@@ -159,7 +205,7 @@ export default function ProjectCard({
   const executeMoveTask = async (task: Task, nextStatus: Task['status']) => {
     const previousStatus = task.status;
 
-    // Optimistic Update
+    // Optimistic Update UI
     setTasks((prev) =>
       prev.map((t) => (t.id === task.id ? { ...t, status: nextStatus } : t))
     );
@@ -169,10 +215,19 @@ export default function ProjectCard({
     setActiveStatus(nextStatus);
 
     try {
-      await fetchApi<ApiResponse<Task>>(`/tasks/${task.id}/status`, {
-  method: 'PATCH',
-  body: JSON.stringify({ status: nextStatus }),
-});
+      await fetchApi<ApiResponse<Task>>(`/tasks/${task.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: task.title,
+          description: task.description || null,
+          status: nextStatus,
+          priority: task.priority,
+          due_date: task.due_date || null,
+        }),
+      });
 
       setToast({
         id: String(Date.now()),
@@ -180,10 +235,6 @@ export default function ProjectCard({
         message: `Tugas "${task.title}" dipindahkan ke ${STATUS_LABEL[nextStatus]}!`,
       });
 
-      // Reload tasks & reset ke Halaman 1 jika di mode Tab
-      if (viewMode === 'tabs') {
-        setCurrentPage(1);
-      }
       loadTasks();
       loadAllTasksForCounts();
     } catch (err: any) {
@@ -252,7 +303,6 @@ export default function ProjectCard({
       setShowNewTaskForm(false);
       setActiveStatus(newTaskStatus);
 
-      // Reset ke Halaman 1 agar task baru langsung terlihat
       setCurrentPage(1);
       loadTasks();
       loadAllTasksForCounts();
@@ -375,7 +425,6 @@ export default function ProjectCard({
     });
   };
 
-  // Menghitung total tugas per status dari seluruh data proyek (allTasksForCounts)
   const totalCounts = STATUS_ORDER.reduce((acc, status) => {
     const list = allTasksForCounts.length > 0 ? allTasksForCounts : tasks;
     acc[status] = list.filter((t) => t.status === status).length;
@@ -385,8 +434,6 @@ export default function ProjectCard({
   const totalTasks = totalServerTasks || tasks.length;
   const doneTasks = (allTasksForCounts.length > 0 ? allTasksForCounts : tasks).filter((t) => t.status === 'DONE').length;
   const progressPercent = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0;
-
-  const visibleTabTasks = tasks.filter((t) => t.status === activeStatus);
 
   const handleOpenAddTaskToStatus = (status: Task['status']) => {
     setNewTaskStatus(status);
@@ -468,29 +515,6 @@ export default function ProjectCard({
                 : `Lihat tugas ${tasksLoaded ? `(${totalTasks})` : ''}`}
             </span>
           </button>
-
-          {expanded && (
-            <div className="view-mode-toggle-group">
-              <button
-                type="button"
-                className={`view-mode-btn ${viewMode === 'kanban' ? 'active' : ''}`}
-                onClick={() => setViewMode('kanban')}
-                title="Tampilan Papan Kanban (Drag & Drop)"
-              >
-                <span className="material-symbols-outlined">view_kanban</span>
-                <span>Papan Kanban</span>
-              </button>
-              <button
-                type="button"
-                className={`view-mode-btn ${viewMode === 'tabs' ? 'active' : ''}`}
-                onClick={() => setViewMode('tabs')}
-                title="Tampilan Daftar Status (Tabs)"
-              >
-                <span className="material-symbols-outlined">view_agenda</span>
-                <span>Tab Status</span>
-              </button>
-            </div>
-          )}
         </div>
 
         {/* Panel Konten Tugas */}
@@ -686,298 +710,303 @@ export default function ProjectCard({
                   </form>
                 )}
 
-                {/* Tampilan 1: Papan Kanban Visual (Drag & Drop) */}
-                {viewMode === 'kanban' && (
-                  <div className="kanban-view-container">
-                    <p className="kanban-hint">
-                      💡 <em>Tips: Tarik dan geser kartu antar kolom untuk mengubah status tugas secara langsung.</em>
-                    </p>
-                    <KanbanBoard
-                      tasks={allTasksForCounts.length > 0 ? allTasksForCounts : tasks}
-                      onMoveTask={executeMoveTask}
-                      onEditTask={handleOpenEditTask}
-                      onDeleteTask={(t) => setTaskToDelete(t)}
-                      onAddTaskToStatus={handleOpenAddTaskToStatus}
-                    />
-                  </div>
-                )}
+                {/* TAMPILAN 1: Papan Kanban Visual (Desktop via CSS) */}
+                <div className="kanban-view-container">
+                  <p className="kanban-hint">
+                    💡 <em>Tips: Tarik dan geser kartu antar kolom untuk mengubah status tugas secara langsung.</em>
+                  </p>
+                  <KanbanBoard
+                    tasks={filteredAndSortedTasks}
+                    onMoveTask={executeMoveTask}
+                    onEditTask={handleOpenEditTask}
+                    onDeleteTask={(t) => setTaskToDelete(t)}
+                    onAddTaskToStatus={handleOpenAddTaskToStatus}
+                  />
+                </div>
 
-                {/* Tampilan 2: Daftar Tab Status Tradisional */}
-                {viewMode === 'tabs' && (
-                  <div className="tabs-view-container">
-                    <StatusTabs
-                      tasks={tasks}
-                      active={activeStatus}
-                      onChange={setActiveStatus}
-                      totalCounts={totalCounts}
-                    />
+                {/* TAMPILAN 2: Daftar Tab Status Tradisional (Mobile via CSS) */}
+        <div className="tabs-view-container">
+          <StatusTabs
+            tasks={filteredAndSortedTasks}
+            active={activeStatus}
+            onChange={setActiveStatus}
+            totalCounts={totalCounts}
+          />
 
-                    {visibleTabTasks.length === 0 ? (
-                      <div className="empty-status-state">
-                        <p className="text-muted task-empty">
-                          Tidak ada tugas berstatus "{STATUS_LABEL[activeStatus]}" di halaman ini.
-                        </p>
-                        {totalCounts[activeStatus] > 0 && (
-                          <p className="hint-other-page">
-                            💡 Terdapat total <strong>{totalCounts[activeStatus]}</strong> tugas berstatus ini di halaman lain. Gunakan tombol navigasi halaman di bawah untuk melihatnya.
-                          </p>
-                        )}
-                      </div>
-                    ) : (
-                      <ul className="task-list">
-                        {visibleTabTasks.map((task) => {
-                          const isTaskExpanded = expandedTaskId === task.id;
-                          const statusIndex = STATUS_ORDER.indexOf(task.status);
-                          const canMovePrev = statusIndex > 0;
-                          const canMoveNext = statusIndex < STATUS_ORDER.length - 1;
+          {(() => {
+            // 1. Filter tugas sesuai tab status aktif (misal: BACKLOG / TODO)
+            const currentTabTasks = filteredAndSortedTasks.filter(
+              (t) => t.status === activeStatus
+            );
 
-                          return (
-                            <li key={task.id} className="task-item task-item-stacked">
-                              <div className="task-item-main-row">
-                                <div
-                                  onClick={() => toggleTaskDetail(task.id)}
-                                  className="task-title-toggle"
-                                  title="Klik untuk melihat/menyembunyikan deskripsi"
-                                >
-                                  <span className="material-symbols-outlined task-expand-icon">
-                                    {isTaskExpanded ? 'expand_less' : 'expand_more'}
-                                  </span>
-                                  <span className="task-title">{task.title}</span>
-                                </div>
+            if (currentTabTasks.length === 0) {
+              return (
+                <div className="empty-status-state">
+                  <p className="text-muted task-empty">
+                    Tidak ada tugas berstatus "{STATUS_LABEL[activeStatus]}".
+                  </p>
+                </div>
+              );
+            }
 
-                                <span
-                                  className={`badge badge-priority-${task.priority.toLowerCase()}`}
-                                >
-                                  {PRIORITY_LABEL[task.priority]}
-                                </span>
-                              </div>
+            // 2. Kunci Limit Pagination (5 tugas per halaman)
+            const limitPerPage = 5;
+            const startIndex = (currentPage - 1) * limitPerPage;
+            const endIndex = startIndex + limitPerPage;
 
-                              {isTaskExpanded && (
-                                <div className="task-detail-body">
-                                  <p className="task-detail-desc">
-                                    <strong>Deskripsi:</strong>{' '}
-                                    {task.description || (
-                                      <em className="text-muted">Tidak ada deskripsi.</em>
-                                    )}
-                                  </p>
-                                  {task.due_date && (
-                                    <p className="task-detail-due">
-                                      <span className="material-symbols-outlined task-detail-due-icon">
-                                        event
-                                      </span>
-                                      <strong>Tenggat:</strong>{' '}
-                                      {formatSafeDate(task.due_date)}
-                                    </p>
-                                  )}
-                                </div>
+            // 3. Potong array tugas agar HANYA 5 tugas yang muncul di halaman aktif
+            const paginatedTabTasks = currentTabTasks.slice(startIndex, endIndex);
+
+            // 4. Hitung total halaman khusus untuk status tab aktif ini
+            const tabTotalPages = Math.ceil(currentTabTasks.length / limitPerPage);
+
+            return (
+              <>
+                <ul className="task-list">
+                  {paginatedTabTasks.map((task) => {
+                    const isTaskExpanded = expandedTaskId === task.id;
+                    const statusIndex = STATUS_ORDER.indexOf(task.status);
+                    const canMovePrev = statusIndex > 0;
+                    const canMoveNext = statusIndex < STATUS_ORDER.length - 1;
+
+                    return (
+                      <li key={task.id} className="task-item task-item-stacked">
+                        <div className="task-item-main-row">
+                          <div
+                            onClick={() => toggleTaskDetail(task.id)}
+                            className="task-title-toggle"
+                            title="Klik untuk melihat/menyembunyikan deskripsi"
+                          >
+                            <span className="material-symbols-outlined task-expand-icon">
+                              {isTaskExpanded ? 'expand_less' : 'expand_more'}
+                            </span>
+                            <span className="task-title">{task.title}</span>
+                          </div>
+
+                          <span
+                            className={`badge badge-priority-${task.priority.toLowerCase()}`}
+                          >
+                            {PRIORITY_LABEL[task.priority]}
+                          </span>
+                        </div>
+
+                        {isTaskExpanded && (
+                          <div className="task-detail-body">
+                            <p className="task-detail-desc">
+                              <strong>Deskripsi:</strong>{' '}
+                              {task.description || (
+                                <em className="text-muted">Tidak ada deskripsi.</em>
                               )}
+                            </p>
+                            {task.due_date && (
+                              <p className="task-detail-due">
+                                <span className="material-symbols-outlined task-detail-due-icon">
+                                  event
+                                </span>
+                                <strong>Tenggat:</strong> {formatSafeDate(task.due_date)}
+                              </p>
+                            )}
+                          </div>
+                        )}
 
-                              <div className="task-item-footer">
-                                <div className="task-move-controls">
-                                  <button
-                                    type="button"
-                                    className="move-btn"
-                                    onClick={() => handleMoveTaskTab(task, 'prev')}
-                                    disabled={!canMovePrev}
-                                    aria-label="Mundurkan status"
-                                  >
-                                    <span className="material-symbols-outlined">
-                                      chevron_left
-                                    </span>
-                                    <span className="move-btn-label">Mundur</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="move-btn move-btn-primary"
-                                    onClick={() => handleMoveTaskTab(task, 'next')}
-                                    disabled={!canMoveNext}
-                                    aria-label="Majukan status"
-                                  >
-                                    <span className="move-btn-label">
-                                      {canMoveNext
-                                        ? `Ke ${STATUS_LABEL[STATUS_ORDER[statusIndex + 1]]}`
-                                        : 'Selesai'}
-                                    </span>
-                                    <span className="material-symbols-outlined">
-                                      chevron_right
-                                    </span>
-                                  </button>
-                                </div>
+                        <div className="task-item-footer">
+                          <div className="task-move-controls">
+                            <button
+                              type="button"
+                              className="move-btn"
+                              onClick={() => handleMoveTaskTab(task, 'prev')}
+                              disabled={!canMovePrev}
+                              aria-label="Mundurkan status"
+                            >
+                              <span className="material-symbols-outlined">chevron_left</span>
+                              <span className="move-btn-label">Mundur</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="move-btn move-btn-primary"
+                              onClick={() => handleMoveTaskTab(task, 'next')}
+                              disabled={!canMoveNext}
+                              aria-label="Majukan status"
+                            >
+                              <span className="move-btn-label">
+                                {canMoveNext
+                                  ? `Ke ${STATUS_LABEL[STATUS_ORDER[statusIndex + 1]]}`
+                                  : 'Selesai'}
+                              </span>
+                              <span className="material-symbols-outlined">chevron_right</span>
+                            </button>
+                          </div>
 
-                                <div className="task-item-actions">
-                                  <button
-                                    type="button"
-                                    className="icon-btn"
-                                    onClick={() => handleOpenEditTask(task)}
-                                    aria-label={`Edit tugas ${task.title}`}
-                                    title="Edit tugas"
-                                  >
-                                    <span className="material-symbols-outlined">edit</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="icon-btn danger"
-                                    onClick={() => setTaskToDelete(task)}
-                                    aria-label={`Hapus tugas ${task.title}`}
-                                    title="Hapus tugas"
-                                  >
-                                    <span className="material-symbols-outlined">
-                                      delete
-                                    </span>
-                                  </button>
-                                </div>
-                              </div>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    )}
-                  </div>
-                )}
+                          <div className="task-item-actions">
+                            <button
+                              type="button"
+                              className="icon-btn"
+                              onClick={() => handleOpenEditTask(task)}
+                              aria-label={`Edit tugas ${task.title}`}
+                              title="Edit tugas"
+                            >
+                              <span className="material-symbols-outlined">edit</span>
+                            </button>
+                            <button
+                              type="button"
+                              className="icon-btn danger"
+                              onClick={() => setTaskToDelete(task)}
+                              aria-label={`Hapus tugas ${task.title}`}
+                              title="Hapus tugas"
+                            >
+                              <span className="material-symbols-outlined">delete</span>
+                            </button>
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
 
-                {/* Kontrol UI Pagination - Hanya Tampil saat Berada di Mode Tab Status */}
-                {viewMode === 'tabs' && totalServerTasks > 0 && (
+                {/* SATU-SATUNYA TOMBOL PAGINATION (Khusus Mobile per Tab) */}
+                {tabTotalPages > 1 && (
                   <div className="pagination-bar">
-                    <span className="pagination-info">
-                      Hal. <strong>{currentPage}</strong>/<strong>{totalPages}</strong> ({totalServerTasks} Task)
-                    </span>
+                    <div className="pagination-info">
+                      Halaman <strong>{currentPage}</strong> dari <strong>{tabTotalPages}</strong>
+                    </div>
                     <div className="pagination-buttons">
                       <button
                         type="button"
-                        onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                        disabled={currentPage === 1}
                         className="pagination-btn"
+                        disabled={currentPage === 1}
+                        onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                       >
-                        &larr; Prev
+                        Sebelumnya
                       </button>
                       <button
                         type="button"
-                        onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                        disabled={currentPage === totalPages || totalPages === 0}
                         className="pagination-btn"
+                        disabled={currentPage === tabTotalPages}
+                        onClick={() => setCurrentPage((p) => Math.min(tabTotalPages, p + 1))}
                       >
-                        Next &rarr;
+                        Selanjutnya
                       </button>
                     </div>
                   </div>
                 )}
               </>
-            )}
-          </div>
+            );
+          })()}
+        </div>
+      </>
+    )}
+  </div>
+)}
+</li>
+
+{/* Modal Edit Tugas */}
+{editingTask && (
+  <div className="modal-overlay" onClick={() => setEditingTask(null)}>
+    <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+      <div className="modal-header">
+        <h3>Edit Tugas</h3>
+        <button
+          type="button"
+          className="btn-close"
+          onClick={() => setEditingTask(null)}
+        >
+          <span className="material-symbols-outlined">close</span>
+        </button>
+      </div>
+
+      <form onSubmit={handleUpdateTask}>
+        {updateTaskError && (
+          <div className="error-message">{updateTaskError}</div>
         )}
-      </li>
 
-      {/* Modal Edit Detail Tugas */}
-      {editingTask && (
-        <div className="modal-overlay" onClick={() => setEditingTask(null)}>
-          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <span className="material-symbols-outlined modal-icon">edit_note</span>
-              <h3>Edit Tugas</h3>
-              <button
-                type="button"
-                className="btn-close"
-                onClick={() => setEditingTask(null)}
-              >
-                <span className="material-symbols-outlined">close</span>
-              </button>
-            </div>
+        <div className="form-group">
+          <label>Nama Tugas *</label>
+          <input
+            type="text"
+            value={editTaskTitle}
+            onChange={(e) => setEditTaskTitle(e.target.value)}
+            required
+          />
+        </div>
 
-            {updateTaskError && <div className="error-message">{updateTaskError}</div>}
+        <div className="form-group">
+          <label>Deskripsi</label>
+          <textarea
+            rows={2}
+            value={editTaskDescription}
+            onChange={(e) => setEditTaskDescription(e.target.value)}
+          />
+        </div>
 
-            <form onSubmit={handleUpdateTask} className="new-task-form">
-              <div className="form-group">
-                <label>Nama Tugas *</label>
-                <input
-                  type="text"
-                  value={editTaskTitle}
-                  onChange={(e) => setEditTaskTitle(e.target.value)}
-                  required
-                />
-              </div>
+        <div className="form-row">
+          <div className="form-group">
+            <label>Prioritas</label>
+            <select
+              value={editTaskPriority}
+              onChange={(e) =>
+                setEditTaskPriority(e.target.value as Task['priority'])
+              }
+            >
+              <option value="LOW">Rendah</option>
+              <option value="MEDIUM">Sedang</option>
+              <option value="HIGH">Tinggi</option>
+            </select>
+          </div>
 
-              <div className="form-group">
-                <label>Deskripsi (opsional)</label>
-                <textarea
-                  rows={3}
-                  value={editTaskDescription}
-                  onChange={(e) => setEditTaskDescription(e.target.value)}
-                />
-              </div>
-
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Prioritas</label>
-                  <select
-                    value={editTaskPriority}
-                    onChange={(e) =>
-                      setEditTaskPriority(e.target.value as Task['priority'])
-                    }
-                  >
-                    <option value="LOW">Rendah</option>
-                    <option value="MEDIUM">Sedang</option>
-                    <option value="HIGH">Tinggi</option>
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label>Tenggat (opsional)</label>
-                  <input
-                    type="date"
-                    value={editTaskDueDate}
-                    onChange={(e) => setEditTaskDueDate(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="form-actions">
-                <button
-                  type="submit"
-                  className="btn-gradient btn-small"
-                  disabled={updatingTask}
-                >
-                  <span>{updatingTask ? 'Menyimpan...' : 'Simpan Perubahan'}</span>
-                </button>
-                <button
-                  type="button"
-                  className="btn-ghost"
-                  onClick={() => setEditingTask(null)}
-                >
-                  <span>Batal</span>
-                </button>
-              </div>
-            </form>
+          <div className="form-group">
+            <label>Tenggat (opsional)</label>
+            <input
+              type="date"
+              value={editTaskDueDate}
+              onChange={(e) => setEditTaskDueDate(e.target.value)}
+            />
           </div>
         </div>
-      )}
 
-      {/* Modal Konfirmasi Hapus Task */}
-      {taskToDelete && (
-        <ConfirmModal
-          isOpen={!!taskToDelete}
-          title="Hapus Tugas"
-          message={`Apakah kamu yakin ingin menghapus tugas "${taskToDelete.title}"?`}
-          confirmLabel="Hapus"
-          cancelLabel="Batal"
-          isDanger
-          onConfirm={handleConfirmDeleteTask}
-          onCancel={() => setTaskToDelete(null)}
-        />
-      )}
+        <div className="form-actions">
+          <button
+            type="submit"
+            className="btn-gradient btn-small"
+            disabled={updatingTask}
+          >
+            <span>{updatingTask ? 'Menyimpan...' : 'Simpan Perubahan'}</span>
+          </button>
+          <button
+            type="button"
+            className="btn-ghost"
+            onClick={() => setEditingTask(null)}
+          >
+            <span>Batal</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+)}
 
-      {/* Modal Konfirmasi Hapus Proyek */}
-      {showDeleteProjectModal && (
-        <ConfirmModal
-          isOpen={showDeleteProjectModal}
-          title="Hapus Proyek"
-          message={`Apakah kamu yakin ingin menghapus proyek "${project.title}"? Semua tugas di dalamnya akan ikut terhapus.`}
-          confirmLabel="Hapus Proyek"
-          cancelLabel="Batal"
-          isDanger
-          onConfirm={handleConfirmDeleteProject}
-          onCancel={() => setShowDeleteProjectModal(false)}
-        />
-      )}
-    </>
-  );
+{/* Modal Hapus Tugas */}
+{taskToDelete && (
+  <ConfirmModal
+    isOpen={true}
+    title="Hapus Tugas"
+    message={`Apakah Anda yakin ingin menghapus tugas "${taskToDelete.title}"?`}
+    confirmLabel="Hapus"
+    onConfirm={handleConfirmDeleteTask}
+    onCancel={() => setTaskToDelete(null)}
+  />
+)}
+
+{/* Modal Hapus Proyek */}
+{showDeleteProjectModal && (
+  <ConfirmModal
+    isOpen={true}
+    title="Hapus Proyek"
+    message={`Apakah Anda yakin ingin menghapus proyek "${project.title}" beserta seluruh tugas di dalamnya?`}
+    confirmLabel="Hapus Proyek"
+    onConfirm={handleConfirmDeleteProject}
+    onCancel={() => setShowDeleteProjectModal(false)}
+  />
+)}
+</>
+);
 }
